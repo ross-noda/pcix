@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="7" failures="0" errors="0" skipped="0" time="11.455" timestamp="2026-09-17T14:06:21" hostname="localhost">
+  <testsuite name="com.example.pix.ExampleInstrumentedTest" tests="1" failures="0" errors="0" skipped="0" time="0.012" timestamp="2026-09-17T14:06:21" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="useAppContext" classname="com.example.pix.ExampleInstrumentedTest" time="0.012" />
+  </testsuite>
+  <testsuite name="com.example.pix.QuickAddTest" tests="1" failures="0" errors="0" skipped="0" time="10.359" timestamp="2026-09-17T14:06:21" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="quickAddPersistsAndCompletionCanBeUndone" classname="com.example.pix.QuickAddTest" time="10.359" />
+  </testsuite>
+  <testsuite name="com.example.pix.RepositoryTest" tests="5" failures="0" errors="0" skipped="0" time="0.384" timestamp="2026-09-17T14:06:21" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="inboxIsProtectedAndDuplicationCopiesRelations" classname="com.example.pix.RepositoryTest" time="0.204" />
+    <testcase name="deleteListMovesCompletedAndActiveTasks" classname="com.example.pix.RepositoryTest" time="0.027" />
+    <testcase name="roomDateFiltersAndSearchCoverMetadata" classname="com.example.pix.RepositoryTest" time="0.051" />
+    <testcase name="tagNormalizationAndCascade" classname="com.example.pix.RepositoryTest" time="0.076" />
+    <testcase name="editDoesNotRevertCompletionAndSubtasksAreIndependent" classname="com.example.pix.RepositoryTest" time="0.026" />
+  </testsuite>
+</testsuites>

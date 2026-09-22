@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.pix.OrderRulesTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-09-19T07:59:17.463Z" hostname="ross-XPS-13-9360" time="0.002">
+  <properties/>
+  <testcase name="missingOrSameTargetLeavesOrderUnchanged" classname="com.example.pix.OrderRulesTest" time="0.0"/>
+  <testcase name="movesBothDirectionsWithoutLosingItems" classname="com.example.pix.OrderRulesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.pix.RecurrenceEngineTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-09-19T07:59:17.467Z" hostname="ross-XPS-13-9360" time="0.043">
+  <properties/>
+  <testcase name="customMonthlyAndDailyIntervals" classname="com.example.pix.RecurrenceEngineTest" time="0.004"/>
+  <testcase name="multiDayEveryOtherWeekHonorsMondayAnchor" classname="com.example.pix.RecurrenceEngineTest" time="0.003"/>
+  <testcase name="yearlyLeapDayReturnsAfterLeapYearCycle" classname="com.example.pix.RecurrenceEngineTest" time="0.001"/>
+  <testcase name="encodedRuleRoundTrips" classname="com.example.pix.RecurrenceEngineTest" time="0.012"/>
+  <testcase name="thousandsOfOccurrencesAlwaysAdvanceAndStayAnchored" classname="com.example.pix.RecurrenceEngineTest" time="0.006"/>
+  <testcase name="weekdaysSkipWeekendsAndCrossYear" classname="com.example.pix.RecurrenceEngineTest" time="0.001"/>
+  <testcase name="dailyLocalTimeStaysAcrossDstAndTimezone" classname="com.example.pix.RecurrenceEngineTest" time="0.012"/>
+  <testcase name="monthlyClampsWithoutLosingOriginalDay" classname="com.example.pix.RecurrenceEngineTest" time="0.0"/>
+  <testcase name="zeroIntervalRejected" classname="com.example.pix.RecurrenceEngineTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

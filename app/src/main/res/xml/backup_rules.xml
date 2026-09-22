@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Auth sessions are device-bound: ciphertext is useless without its Android Keystore key. -->
+    <exclude domain="sharedpref" path="pcix.auth.secure.xml" />
+    <!-- Also exclude the pre-hardening plaintext store so it can never be backed up. -->
+    <exclude domain="sharedpref" path="pcix.auth.xml" />
+</full-backup-content>

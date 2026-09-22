@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.pix.CalendarRulesTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-09-18T04:26:18.334Z" hostname="ross-XPS-13-9360" time="0.041">
+  <properties/>
+  <testcase name="monthNavigationClampsAtEndAndCrossesYears" classname="com.example.pix.CalendarRulesTest" time="0.013"/>
+  <testcase name="gridsCoverLeapFebruaryAndSixWeekMonths" classname="com.example.pix.CalendarRulesTest" time="0.02"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

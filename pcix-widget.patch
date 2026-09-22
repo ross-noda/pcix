@@ -1,0 +1,1468 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index f99702a..163febe 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -47,6 +47,7 @@ android {
+ 
+ dependencies {
+     implementation(libs.androidx.work.runtime)
++    implementation(libs.androidx.glance.appwidget)
+     implementation(libs.okhttp)
+     implementation(libs.androidx.credentials)
+     implementation(libs.androidx.credentials.play)
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 2f49ece..07b5eda 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -20,6 +20,29 @@
+         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.sharing" android:exported="false" android:grantUriPermissions="true">
+             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/sharing_paths" />
+         </provider>
++        <receiver
++            android:name=".widget.TaskWidgetReceiver"
++            android:exported="true">
++            <intent-filter>
++                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
++            </intent-filter>
++            <meta-data
++                android:name="android.appwidget.provider"
++                android:resource="@xml/task_widget_info" />
++        </receiver>
++        <receiver
++            android:name=".widget.TaskWidgetDateChangeReceiver"
++            android:exported="false">
++            <intent-filter>
++                <action android:name="android.intent.action.DATE_CHANGED" />
++                <action android:name="android.intent.action.TIME_SET" />
++                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
++            </intent-filter>
++        </receiver>
++        <activity
++            android:name=".widget.TaskWidgetConfigureActivity"
++            android:exported="true"
++            android:theme="@style/Theme.Pix" />
+         <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
+         <receiver android:name=".reminders.ReminderRescheduleReceiver" android:exported="false">
+             <intent-filter>
+diff --git a/app/src/main/java/com/example/pix/MainActivity.kt b/app/src/main/java/com/example/pix/MainActivity.kt
+index 92f7568..fc97dd7 100644
+--- a/app/src/main/java/com/example/pix/MainActivity.kt
++++ b/app/src/main/java/com/example/pix/MainActivity.kt
+@@ -20,6 +20,7 @@ import com.example.pix.cloud.AuthState
+ import com.example.pix.cloud.CloudSyncWork
+ import com.example.pix.google.GoogleCalendarWork
+ import com.example.pix.reminders.ReminderWork
++import com.example.pix.data.TaskEntity
+ import com.example.pix.ui.AuthScreen
+ import com.example.pix.ui.LegacyImportScreen
+ import com.example.pix.ui.PixApp
+@@ -35,7 +36,7 @@ class MainActivity : ComponentActivity() {
+         setContent {
+             val app = application as PixApplication
+             val model: TasksViewModel = viewModel()
+-            LaunchedEffect(Unit) { intent.getStringExtra("taskId")?.let(model::openTask) }
++            LaunchedEffect(Unit) { handleWidgetIntent(intent, model) }
+             val lifecycle = LocalLifecycleOwner.current.lifecycle
+             DisposableEffect(lifecycle, model) {
+                 val observer = LifecycleEventObserver { _, event ->
+@@ -83,7 +84,23 @@ class MainActivity : ComponentActivity() {
+ 
+     override fun onNewIntent(intent: Intent) {
+         super.onNewIntent(intent)
++        setIntent(intent)
+         handleAuthIntent(intent)
++        if (intent.action == ACTION_NEW_TASK || intent.action == ACTION_OPEN_TASK) recreate()
++    }
++
++    private fun handleWidgetIntent(intent: Intent?, model: TasksViewModel) {
++        when (intent?.action) {
++            ACTION_NEW_TASK -> model.openNew(TaskEntity(title = ""), emptySet())
++            ACTION_OPEN_TASK -> intent.getStringExtra(EXTRA_TASK_ID)?.let(model::openTask)
++            else -> intent?.getStringExtra(EXTRA_TASK_ID)?.let(model::openTask)
++        }
++    }
++
++    companion object {
++        const val ACTION_NEW_TASK = "com.example.pix.action.NEW_TASK"
++        const val ACTION_OPEN_TASK = "com.example.pix.action.OPEN_TASK"
++        const val EXTRA_TASK_ID = "taskId"
+     }
+ 
+     private fun handleAuthIntent(intent: Intent?) {
+diff --git a/app/src/main/java/com/example/pix/PixApplication.kt b/app/src/main/java/com/example/pix/PixApplication.kt
+index 3f852bd..2a4598d 100644
+--- a/app/src/main/java/com/example/pix/PixApplication.kt
++++ b/app/src/main/java/com/example/pix/PixApplication.kt
+@@ -7,6 +7,7 @@ import com.example.pix.data.TaskRepository
+ import com.example.pix.google.GoogleCalendarRepository
+ import com.example.pix.google.GoogleCalendarWork
+ import com.example.pix.reminders.*
++import com.example.pix.widget.TaskWidgetUpdater
+ import kotlinx.coroutines.*
+ 
+ class PixApplication : Application() {
+@@ -24,6 +25,7 @@ class PixApplication : Application() {
+         SyncEngine(database, auth, remote) { ReminderWork.reconcile(this) }
+     }
+     val google by lazy { GoogleCalendarRepository(this, database, http, cloud) }
++    val widgetUpdater by lazy { TaskWidgetUpdater(this, database, backgroundScope) }
+     val repository by lazy {
+         TaskRepository(
+             database,
+@@ -35,6 +37,7 @@ class PixApplication : Application() {
+     override fun onCreate() {
+         super.onCreate()
+         ReminderWork.initialize(this)
++        widgetUpdater.start()
+         if (cloud.configured) {
+             CloudSyncWork.initialize(this)
+             session.start()
+diff --git a/app/src/main/java/com/example/pix/ui/TaskEditor.kt b/app/src/main/java/com/example/pix/ui/TaskEditor.kt
+index 4dec82f..eddc52e 100644
+--- a/app/src/main/java/com/example/pix/ui/TaskEditor.kt
++++ b/app/src/main/java/com/example/pix/ui/TaskEditor.kt
+@@ -234,6 +234,15 @@ fun TaskEditor(
+             if (uri != null) model.attachImage(uri)
+         }
+     val isNew by model.isNewDraft.collectAsStateWithLifecycle()
++    val titleFocusRequester = remember(draft.task.id) { FocusRequester() }
++    val keyboardController = LocalSoftwareKeyboardController.current
++    LaunchedEffect(isNew, draft.task.id) {
++        if (isNew && draft.task.title.isBlank()) {
++            kotlinx.coroutines.delay(180)
++            titleFocusRequester.requestFocus()
++            keyboardController?.show()
++        }
++    }
+     var discardNew by remember { mutableStateOf(false) }
+     val selected by model.selected.collectAsStateWithLifecycle()
+     val live = selected?.takeIf { it.task.id == draft.task.id }
+@@ -390,7 +399,7 @@ fun TaskEditor(
+                         placeholder = { Text(stringResource(R.string.title)) },
+                         textStyle = MaterialTheme.typography.headlineSmall,
+                         colors = plainFieldColors(),
+-                        modifier = Modifier.fillMaxWidth().testTag("detail-title"),
++                        modifier = Modifier.fillMaxWidth().focusRequester(titleFocusRequester).testTag("detail-title"),
+                         isError = !TaskRules.validTitle(task.title),
+                         supportingText = {
+                             if (!TaskRules.validTitle(task.title))
+diff --git a/app/src/main/java/com/example/pix/ui/TasksViewModel.kt b/app/src/main/java/com/example/pix/ui/TasksViewModel.kt
+index 52ddb85..3661fa0 100644
+--- a/app/src/main/java/com/example/pix/ui/TasksViewModel.kt
++++ b/app/src/main/java/com/example/pix/ui/TasksViewModel.kt
+@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
+ import androidx.lifecycle.SavedStateHandle
+ import androidx.lifecycle.viewModelScope
+ import com.example.pix.PixApplication
+-import com.example.pix.PixApplication
+ import com.example.pix.data.*
+ import com.example.pix.domain.TaskRules
+ import java.time.ZonedDateTime
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidget.kt b/app/src/main/java/com/example/pix/widget/TaskWidget.kt
+new file mode 100644
+index 0000000..329ed29
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidget.kt
+@@ -0,0 +1,280 @@
++package com.example.pix.widget
++
++import android.appwidget.AppWidgetManager
++import android.content.Context
++import android.content.Intent
++import android.net.Uri
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.unit.DpSize
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import androidx.glance.ColorFilter
++import androidx.glance.GlanceId
++import androidx.glance.GlanceModifier
++import androidx.glance.Image
++import androidx.glance.ImageProvider
++import androidx.glance.LocalSize
++import androidx.glance.action.actionParametersOf
++import androidx.glance.action.clickable
++import androidx.glance.appwidget.GlanceAppWidget
++import androidx.glance.appwidget.GlanceAppWidgetManager
++import androidx.glance.appwidget.provideContent
++import androidx.glance.appwidget.SizeMode
++import androidx.glance.appwidget.action.actionRunCallback
++import androidx.glance.appwidget.action.actionStartActivity
++import androidx.glance.appwidget.appWidgetBackground
++import androidx.glance.appwidget.background
++import androidx.glance.appwidget.cornerRadius
++import androidx.glance.appwidget.lazy.LazyColumn
++import androidx.glance.appwidget.lazy.items
++import androidx.glance.layout.Alignment
++import androidx.glance.layout.Box
++import androidx.glance.layout.Column
++import androidx.glance.layout.Row
++import androidx.glance.layout.Spacer
++import androidx.glance.layout.defaultWeight
++import androidx.glance.layout.fillMaxHeight
++import androidx.glance.layout.fillMaxSize
++import androidx.glance.layout.fillMaxWidth
++import androidx.glance.layout.height
++import androidx.glance.layout.padding
++import androidx.glance.layout.size
++import androidx.glance.layout.width
++import androidx.glance.text.FontWeight
++import androidx.glance.text.Text
++import androidx.glance.text.TextStyle
++import androidx.glance.unit.ColorProvider
++import com.example.pix.MainActivity
++import com.example.pix.R
++
++class TaskWidget : GlanceAppWidget() {
++    override val sizeMode: SizeMode =
++        SizeMode.Responsive(
++            setOf(
++                DpSize(180.dp, 120.dp),
++                DpSize(280.dp, 220.dp),
++                DpSize(360.dp, 360.dp),
++            )
++        )
++
++    override suspend fun provideGlance(context: Context, id: GlanceId) {
++        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
++        val content = runCatching { TaskWidgetDataSource(context).load(appWidgetId) }.getOrNull()
++        provideContent {
++            val palette = WidgetPalette.forContext(context)
++            WidgetSurface(context, appWidgetId, content, palette)
++        }
++    }
++}
++
++private data class WidgetPalette(
++    val surface: Color,
++    val primaryText: Color,
++    val secondaryText: Color,
++    val error: Color,
++    val textScale: Float,
++) {
++    companion object {
++        fun forContext(context: Context): WidgetPalette {
++            val prefs = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
++            val mode = prefs.getInt("theme", 0)
++            val textScale = listOf(.88f, 1f, 1.15f)[prefs.getInt("textSize", 1).coerceIn(0, 2)]
++            val systemDark =
++                (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
++                    android.content.res.Configuration.UI_MODE_NIGHT_YES
++            val dark = mode == 2 || (mode == 0 && systemDark)
++            return if (dark) {
++                WidgetPalette(
++                    surface = Color(0xFF1D1D1F),
++                    primaryText = Color(0xFFEDEDF0),
++                    secondaryText = Color(0xFF98989F),
++                    error = Color(0xFFFF6D80),
++                    textScale = textScale,
++                )
++            } else {
++                WidgetPalette(
++                    surface = Color.White,
++                    primaryText = Color(0xFF181A20),
++                    secondaryText = Color(0xFF666B76),
++                    error = Color(0xFFC83C51),
++                    textScale = textScale,
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun WidgetSurface(
++    context: Context,
++    appWidgetId: Int,
++    content: WidgetContent?,
++    palette: WidgetPalette,
++) {
++    val size = LocalSize.current
++    val compact = size.width < 250.dp || size.height < 180.dp
++    Column(
++        modifier =
++            GlanceModifier.fillMaxSize()
++                .background(palette.surface, palette.surface)
++                .cornerRadius(R.dimen.widget_corner_radius)
++                .appWidgetBackground()
++                .padding(horizontal = if (compact) 12.dp else 16.dp, vertical = 12.dp),
++    ) {
++        Header(context, appWidgetId, content?.filterLabel ?: context.getString(R.string.all), palette, compact)
++        Spacer(GlanceModifier.height(if (compact) 4.dp else 8.dp))
++        if (content == null) {
++            EmptyState(context.getString(R.string.widget_unavailable), palette)
++            return@Column
++        }
++        val totalTasks = content.groups.sumOf { it.tasks.size }
++        if (totalTasks == 0) {
++            EmptyState(content.emptyLabel, palette)
++            return@Column
++        }
++        LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
++            content.groups.forEach { group ->
++                if (!compact && content.config.groupBy != WidgetGroupBy.NONE && group.tasks.isNotEmpty()) {
++                    item { GroupHeader(group, palette) }
++                }
++                items(group.tasks) { task -> TaskRow(context, task, group.colorArgb, palette, compact) }
++            }
++        }
++    }
++}
++
++@Composable
++private fun Header(
++    context: Context,
++    appWidgetId: Int,
++    label: String,
++    palette: WidgetPalette,
++    compact: Boolean,
++) {
++    Row(
++        modifier = GlanceModifier.fillMaxWidth(),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        Text(
++            text = if (compact) label else "$label  ˅",
++            modifier = GlanceModifier.defaultWeight().padding(vertical = 8.dp).clickable(configAction(context, appWidgetId, WidgetConfigMode.FILTER)),
++            maxLines = 1,
++            style = TextStyle(color = ColorProvider(palette.primaryText), fontSize = ((if (compact) 19f else 23f) * palette.textScale).sp, fontWeight = FontWeight.Bold),
++        )
++        Box(
++            modifier = GlanceModifier.size(48.dp).clickable(newTaskAction(context)),
++            contentAlignment = Alignment.Center,
++        ) {
++            Image(
++                provider = ImageProvider(R.drawable.ic_widget_add),
++                contentDescription = context.getString(R.string.widget_add_task),
++                modifier = GlanceModifier.size(26.dp),
++                colorFilter = ColorFilter.tint(ColorProvider(palette.primaryText)),
++            )
++        }
++        if (!compact) {
++            Box(
++                modifier =
++                    GlanceModifier.size(48.dp)
++                        .clickable(configAction(context, appWidgetId, WidgetConfigMode.GROUPING)),
++                contentAlignment = Alignment.Center,
++            ) {
++                Image(
++                    provider = ImageProvider(R.drawable.ic_widget_more),
++                    contentDescription = context.getString(R.string.widget_more_options),
++                    modifier = GlanceModifier.size(24.dp),
++                    colorFilter = ColorFilter.tint(ColorProvider(palette.primaryText)),
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun GroupHeader(group: WidgetGroup, palette: WidgetPalette) {
++    Text(
++        text = group.title,
++        modifier = GlanceModifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp, start = 4.dp),
++        maxLines = 1,
++        style = TextStyle(color = ColorProvider(palette.secondaryText), fontSize = (13f * palette.textScale).sp, fontWeight = FontWeight.Medium),
++    )
++}
++
++@Composable
++private fun TaskRow(
++    context: Context,
++    task: WidgetTask,
++    groupColor: Int,
++    palette: WidgetPalette,
++    compact: Boolean,
++) {
++    Row(
++        modifier = GlanceModifier.fillMaxWidth().height(if (compact) 48.dp else 52.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        Box(GlanceModifier.width(4.dp).fillMaxHeight().background(Color(groupColor), Color(groupColor))) {}
++        Spacer(GlanceModifier.width(8.dp))
++        Image(
++            provider = ImageProvider(R.drawable.ic_widget_checkbox),
++            contentDescription = context.getString(R.string.widget_complete_task, task.title),
++            modifier =
++                GlanceModifier.size(48.dp)
++                    .padding(12.dp)
++                    .clickable(actionRunCallback<CompleteTaskAction>(actionParametersOf(TaskIdKey to task.id))),
++            colorFilter = ColorFilter.tint(ColorProvider(Color(TaskWidgetDataSource.priorityColor(task.priority)))),
++        )
++        Spacer(GlanceModifier.width(4.dp))
++        Row(
++            modifier = GlanceModifier.defaultWeight().fillMaxHeight().clickable(taskAction(context, task.id)),
++            verticalAlignment = Alignment.CenterVertically,
++        ) {
++            Text(
++                text = task.title,
++                modifier = GlanceModifier.defaultWeight(),
++                maxLines = 1,
++                style = TextStyle(color = ColorProvider(palette.primaryText), fontSize = ((if (compact) 14f else 16f) * palette.textScale).sp, fontWeight = FontWeight.Medium),
++            )
++            if (!compact && task.dueLabel.isNotBlank()) {
++                Spacer(GlanceModifier.width(8.dp))
++                Text(
++                    text = task.dueLabel,
++                    maxLines = 1,
++                    style = TextStyle(color = ColorProvider(if (task.overdue) palette.error else palette.secondaryText), fontSize = (12f * palette.textScale).sp),
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun EmptyState(text: String, palette: WidgetPalette) {
++    Box(modifier = GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
++        Text(text = text, style = TextStyle(color = ColorProvider(palette.secondaryText), fontSize = (14f * palette.textScale).sp))
++    }
++}
++
++private fun configAction(context: Context, appWidgetId: Int, mode: WidgetConfigMode) =
++    actionStartActivity(
++        Intent(context, TaskWidgetConfigureActivity::class.java)
++            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
++            .putExtra(TaskWidgetConfigureActivity.EXTRA_MODE, mode.name)
++            .setData(Uri.parse("pix://widget/config/$appWidgetId/${mode.name}"))
++    )
++
++private fun newTaskAction(context: Context) =
++    actionStartActivity(
++        Intent(context, MainActivity::class.java)
++            .setAction(MainActivity.ACTION_NEW_TASK)
++            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
++            .setData(Uri.parse("pix://widget/new"))
++    )
++
++private fun taskAction(context: Context, taskId: String) =
++    actionStartActivity(
++        Intent(context, MainActivity::class.java)
++            .setAction(MainActivity.ACTION_OPEN_TASK)
++            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
++            .putExtra(MainActivity.EXTRA_TASK_ID, taskId)
++            .setData(Uri.parse("pix://widget/task/$taskId"))
++    )
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetActions.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetActions.kt
+new file mode 100644
+index 0000000..3eddfc0
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetActions.kt
+@@ -0,0 +1,22 @@
++package com.example.pix.widget
++
++import android.content.Context
++import androidx.glance.GlanceId
++import androidx.glance.action.ActionParameters
++import androidx.glance.appwidget.action.ActionCallback
++import com.example.pix.PixApplication
++
++val TaskIdKey = ActionParameters.Key<String>("task_id")
++
++class CompleteTaskAction : ActionCallback {
++    override suspend fun onAction(
++        context: Context,
++        glanceId: GlanceId,
++        parameters: ActionParameters,
++    ) {
++        val taskId = parameters[TaskIdKey] ?: return
++        val app = context.applicationContext as PixApplication
++        runCatching { app.repository.complete(taskId, true) }
++        TaskWidget().update(context, glanceId)
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetConfig.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetConfig.kt
+new file mode 100644
+index 0000000..2e36c92
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetConfig.kt
+@@ -0,0 +1,31 @@
++package com.example.pix.widget
++
++enum class WidgetFilterType {
++    ALL,
++    TODAY,
++    TOMORROW,
++    NEXT_7_DAYS,
++    LIST,
++    TAG,
++}
++
++enum class WidgetGroupBy {
++    LIST,
++    DATE,
++    TAG,
++    CREATED_AT,
++    PRIORITY,
++    NONE,
++}
++
++data class TaskWidgetConfig(
++    val filterType: WidgetFilterType = WidgetFilterType.ALL,
++    val filterEntityId: String? = null,
++    val groupBy: WidgetGroupBy = WidgetGroupBy.LIST,
++)
++
++enum class WidgetConfigMode {
++    FULL,
++    FILTER,
++    GROUPING,
++}
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetConfigStore.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetConfigStore.kt
+new file mode 100644
+index 0000000..dcfc858
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetConfigStore.kt
+@@ -0,0 +1,62 @@
++package com.example.pix.widget
++
++import android.content.Context
++
++class TaskWidgetConfigStore(context: Context) {
++    private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
++
++    fun read(appWidgetId: Int): TaskWidgetConfig {
++        val prefix = keyPrefix(appWidgetId)
++        val filter =
++            runCatching {
++                    WidgetFilterType.valueOf(
++                        prefs.getString(prefix + FILTER, WidgetFilterType.ALL.name)
++                            ?: WidgetFilterType.ALL.name
++                    )
++                }
++                .getOrDefault(WidgetFilterType.ALL)
++        val group =
++            runCatching {
++                    WidgetGroupBy.valueOf(
++                        prefs.getString(prefix + GROUP, WidgetGroupBy.LIST.name)
++                            ?: WidgetGroupBy.LIST.name
++                    )
++                }
++                .getOrDefault(WidgetGroupBy.LIST)
++        return TaskWidgetConfig(
++            filterType = filter,
++            filterEntityId = prefs.getString(prefix + ENTITY, null),
++            groupBy = group,
++        )
++    }
++
++    fun write(appWidgetId: Int, config: TaskWidgetConfig) {
++        val prefix = keyPrefix(appWidgetId)
++        prefs.edit()
++            .putString(prefix + FILTER, config.filterType.name)
++            .putString(prefix + GROUP, config.groupBy.name)
++            .apply {
++                if (config.filterEntityId == null) remove(prefix + ENTITY)
++                else putString(prefix + ENTITY, config.filterEntityId)
++            }
++            .apply()
++    }
++
++    fun delete(appWidgetId: Int) {
++        val prefix = keyPrefix(appWidgetId)
++        prefs.edit()
++            .remove(prefix + FILTER)
++            .remove(prefix + ENTITY)
++            .remove(prefix + GROUP)
++            .apply()
++    }
++
++    private fun keyPrefix(id: Int) = "widget_${id}_"
++
++    private companion object {
++        const val PREFS = "task_widget_config"
++        const val FILTER = "filter"
++        const val ENTITY = "entity"
++        const val GROUP = "group"
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetConfigureActivity.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetConfigureActivity.kt
+new file mode 100644
+index 0000000..a468214
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetConfigureActivity.kt
+@@ -0,0 +1,227 @@
++package com.example.pix.widget
++
++import android.app.Activity
++import android.appwidget.AppWidgetManager
++import android.content.Intent
++import android.os.Bundle
++import androidx.activity.ComponentActivity
++import androidx.activity.compose.setContent
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import androidx.glance.appwidget.GlanceAppWidgetManager
++import androidx.lifecycle.lifecycleScope
++import com.example.pix.PixApplication
++import com.example.pix.R
++import com.example.pix.data.ListWithCount
++import com.example.pix.data.TagWithCount
++import com.example.pix.ui.theme.PixTheme
++import kotlinx.coroutines.launch
++
++class TaskWidgetConfigureActivity : ComponentActivity() {
++    private var appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        appWidgetId =
++            intent?.getIntExtra(
++                AppWidgetManager.EXTRA_APPWIDGET_ID,
++                AppWidgetManager.INVALID_APPWIDGET_ID,
++            ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
++        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
++            finish()
++            return
++        }
++        setResult(
++            Activity.RESULT_CANCELED,
++            Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
++        )
++        val mode =
++            runCatching {
++                    WidgetConfigMode.valueOf(
++                        intent?.getStringExtra(EXTRA_MODE) ?: WidgetConfigMode.FULL.name
++                    )
++                }
++                .getOrDefault(WidgetConfigMode.FULL)
++        val store = TaskWidgetConfigStore(this)
++        val initial = store.read(appWidgetId)
++        setContent {
++            val app = application as PixApplication
++            val lists by app.repository.lists.collectAsState(initial = emptyList())
++            val tags by app.repository.tags.collectAsState(initial = emptyList())
++            val themePrefs = remember { getSharedPreferences("appearance", 0) }
++            PixTheme(
++                mode = themePrefs.getInt("theme", 0),
++                accent = themePrefs.getInt("accent", 0xFF5275FF.toInt()),
++                textSize = themePrefs.getInt("textSize", 1),
++                fontStyle = themePrefs.getInt("fontStyle", 0),
++            ) {
++                ConfigureContent(mode, initial, lists, tags) { config ->
++                    lifecycleScope.launch {
++                        store.write(appWidgetId, config)
++                        val glanceId = GlanceAppWidgetManager(this@TaskWidgetConfigureActivity).getGlanceIdBy(appWidgetId)
++                        TaskWidget().update(this@TaskWidgetConfigureActivity, glanceId)
++                        setResult(
++                            Activity.RESULT_OK,
++                            Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
++                        )
++                        finish()
++                    }
++                }
++            }
++        }
++    }
++
++    companion object {
++        const val EXTRA_MODE = "widget_config_mode"
++    }
++}
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++private fun ConfigureContent(
++    mode: WidgetConfigMode,
++    initial: TaskWidgetConfig,
++    lists: List<ListWithCount>,
++    tags: List<TagWithCount>,
++    onSave: (TaskWidgetConfig) -> Unit,
++) {
++    var filter by remember { mutableStateOf(initial.filterType) }
++    var entityId by remember { mutableStateOf(initial.filterEntityId) }
++    var groupBy by remember { mutableStateOf(initial.groupBy) }
++    val title =
++        when (mode) {
++            WidgetConfigMode.FILTER -> R.string.widget_filter_title
++            WidgetConfigMode.GROUPING -> R.string.widget_group_title
++            WidgetConfigMode.FULL -> R.string.widget_settings
++        }
++
++    Scaffold(
++        topBar = { TopAppBar(title = { Text(androidx.compose.ui.res.stringResource(title)) }) },
++        bottomBar = {
++            Surface(tonalElevation = 3.dp) {
++                Button(
++                    onClick = { onSave(TaskWidgetConfig(filter, entityId, groupBy)) },
++                    enabled =
++                        when (filter) {
++                            WidgetFilterType.LIST, WidgetFilterType.TAG -> entityId != null
++                            else -> true
++                        },
++                    modifier = Modifier.fillMaxWidth().padding(16.dp),
++                ) {
++                    Text(androidx.compose.ui.res.stringResource(R.string.done))
++                }
++            }
++        },
++    ) { padding ->
++        LazyColumn(
++            modifier = Modifier.fillMaxSize().padding(padding),
++            contentPadding = PaddingValues(bottom = 20.dp),
++        ) {
++            if (mode != WidgetConfigMode.GROUPING) {
++                item { SectionLabel(R.string.widget_filter_title) }
++                item {
++                    ChoiceRow(R.string.all, filter == WidgetFilterType.ALL) {
++                        filter = WidgetFilterType.ALL
++                        entityId = null
++                    }
++                }
++                item {
++                    ChoiceRow(R.string.today, filter == WidgetFilterType.TODAY) {
++                        filter = WidgetFilterType.TODAY
++                        entityId = null
++                    }
++                }
++                item {
++                    ChoiceRow(R.string.tomorrow, filter == WidgetFilterType.TOMORROW) {
++                        filter = WidgetFilterType.TOMORROW
++                        entityId = null
++                    }
++                }
++                item {
++                    ChoiceRow(R.string.week, filter == WidgetFilterType.NEXT_7_DAYS) {
++                        filter = WidgetFilterType.NEXT_7_DAYS
++                        entityId = null
++                    }
++                }
++                item {
++                    ChoiceRow(R.string.widget_filter_list, filter == WidgetFilterType.LIST) {
++                        filter = WidgetFilterType.LIST
++                        if (lists.none { it.list.id == entityId }) entityId = lists.firstOrNull()?.list?.id
++                    }
++                }
++                if (filter == WidgetFilterType.LIST) {
++                    items(lists, key = { it.list.id }) { row ->
++                        EntityChoice("${row.list.icon} ${row.list.name}", row.list.id == entityId) {
++                            entityId = row.list.id
++                        }
++                    }
++                }
++                item {
++                    ChoiceRow(R.string.widget_filter_tag, filter == WidgetFilterType.TAG) {
++                        filter = WidgetFilterType.TAG
++                        if (tags.none { it.tag.id == entityId }) entityId = tags.firstOrNull()?.tag?.id
++                    }
++                }
++                if (filter == WidgetFilterType.TAG) {
++                    items(tags, key = { it.tag.id }) { row ->
++                        EntityChoice("#${row.tag.name}", row.tag.id == entityId) { entityId = row.tag.id }
++                    }
++                }
++            }
++
++            if (mode != WidgetConfigMode.FILTER) {
++                item { SectionLabel(R.string.widget_group_title) }
++                item { GroupChoice(R.string.widget_group_list, WidgetGroupBy.LIST, groupBy) { groupBy = it } }
++                item { GroupChoice(R.string.widget_group_date, WidgetGroupBy.DATE, groupBy) { groupBy = it } }
++                item { GroupChoice(R.string.widget_group_tag, WidgetGroupBy.TAG, groupBy) { groupBy = it } }
++                item { GroupChoice(R.string.widget_group_created, WidgetGroupBy.CREATED_AT, groupBy) { groupBy = it } }
++                item { GroupChoice(R.string.priority, WidgetGroupBy.PRIORITY, groupBy) { groupBy = it } }
++                item { GroupChoice(R.string.widget_group_none, WidgetGroupBy.NONE, groupBy) { groupBy = it } }
++            }
++        }
++    }
++}
++
++@Composable
++private fun SectionLabel(label: Int) {
++    Text(
++        text = androidx.compose.ui.res.stringResource(label),
++        style = MaterialTheme.typography.titleMedium,
++        color = MaterialTheme.colorScheme.primary,
++        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
++    )
++}
++
++@Composable
++private fun ChoiceRow(label: Int, selected: Boolean, onClick: () -> Unit) {
++    EntityChoice(androidx.compose.ui.res.stringResource(label), selected, onClick)
++}
++
++@Composable
++private fun GroupChoice(
++    label: Int,
++    value: WidgetGroupBy,
++    selected: WidgetGroupBy,
++    onClick: (WidgetGroupBy) -> Unit,
++) {
++    EntityChoice(androidx.compose.ui.res.stringResource(label), value == selected) { onClick(value) }
++}
++
++@Composable
++private fun EntityChoice(label: String, selected: Boolean, onClick: () -> Unit) {
++    Row(
++        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        RadioButton(selected = selected, onClick = onClick)
++        Spacer(Modifier.width(12.dp))
++        Text(label, style = MaterialTheme.typography.bodyLarge)
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetDataSource.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetDataSource.kt
+new file mode 100644
+index 0000000..b751658
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetDataSource.kt
+@@ -0,0 +1,325 @@
++package com.example.pix.widget
++
++import android.content.Context
++import com.example.pix.PixApplication
++import com.example.pix.R
++import com.example.pix.data.ListEntity
++import com.example.pix.data.TagEntity
++import com.example.pix.data.TaskFilter
++import com.example.pix.data.TaskWithDetails
++import java.time.Instant
++import java.time.LocalDate
++import java.time.ZoneId
++import java.time.ZonedDateTime
++import java.time.format.DateTimeFormatter
++import java.time.format.FormatStyle
++import java.util.Locale
++import kotlinx.coroutines.flow.first
++
++class TaskWidgetDataSource(private val context: Context) {
++    private val app = context.applicationContext as PixApplication
++    private val repository = app.repository
++
++    suspend fun load(appWidgetId: Int): WidgetContent {
++        val store = TaskWidgetConfigStore(context)
++        val stored = store.read(appWidgetId)
++        val lists = repository.lists.first().map { it.list }
++        val tags = repository.tags.first().map { it.tag }
++        val config = validate(stored, lists, tags)
++        if (config != stored) store.write(appWidgetId, config)
++
++        val now = ZonedDateTime.now()
++        val filter = config.toTaskFilter()
++        val tasks = repository.observe(filter, now).first()
++        val neutralColor =
++            context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
++                .getInt("accent", NEUTRAL)
++        val groups = group(tasks, config.groupBy, lists, tags, now, neutralColor)
++        return WidgetContent(
++            config = config,
++            filterLabel = filterLabel(config, lists, tags),
++            groups = groups,
++            emptyLabel = emptyLabel(config.filterType),
++        )
++    }
++
++    private fun validate(
++        config: TaskWidgetConfig,
++        lists: List<ListEntity>,
++        tags: List<TagEntity>,
++    ): TaskWidgetConfig =
++        when (config.filterType) {
++            WidgetFilterType.LIST ->
++                if (lists.any { it.id == config.filterEntityId }) config
++                else config.copy(filterType = WidgetFilterType.ALL, filterEntityId = null)
++            WidgetFilterType.TAG ->
++                if (tags.any { it.id == config.filterEntityId }) config
++                else config.copy(filterType = WidgetFilterType.ALL, filterEntityId = null)
++            else -> config.copy(filterEntityId = null)
++        }
++
++    private fun TaskWidgetConfig.toTaskFilter(): TaskFilter =
++        when (filterType) {
++            WidgetFilterType.ALL -> TaskFilter(mode = "ALL")
++            WidgetFilterType.TODAY -> TaskFilter(mode = "TODAY")
++            WidgetFilterType.TOMORROW -> TaskFilter(mode = "TOMORROW")
++            WidgetFilterType.NEXT_7_DAYS -> TaskFilter(mode = "WEEK")
++            WidgetFilterType.LIST -> TaskFilter(mode = "ALL", listId = filterEntityId)
++            WidgetFilterType.TAG -> TaskFilter(mode = "ALL", tagId = filterEntityId)
++        }
++
++    private fun filterLabel(
++        config: TaskWidgetConfig,
++        lists: List<ListEntity>,
++        tags: List<TagEntity>,
++    ): String =
++        when (config.filterType) {
++            WidgetFilterType.ALL -> context.getString(R.string.all)
++            WidgetFilterType.TODAY -> context.getString(R.string.today)
++            WidgetFilterType.TOMORROW -> context.getString(R.string.tomorrow)
++            WidgetFilterType.NEXT_7_DAYS -> context.getString(R.string.week)
++            WidgetFilterType.LIST ->
++                lists.firstOrNull { it.id == config.filterEntityId }?.name
++                    ?: context.getString(R.string.all)
++            WidgetFilterType.TAG ->
++                tags.firstOrNull { it.id == config.filterEntityId }?.let { "#${it.name}" }
++                    ?: context.getString(R.string.all)
++        }
++
++    private fun emptyLabel(filter: WidgetFilterType): String =
++        when (filter) {
++            WidgetFilterType.TODAY -> context.getString(R.string.widget_empty_today)
++            WidgetFilterType.TOMORROW -> context.getString(R.string.widget_empty_tomorrow)
++            WidgetFilterType.NEXT_7_DAYS -> context.getString(R.string.widget_empty_week)
++            else -> context.getString(R.string.widget_empty_generic)
++        }
++
++    private fun group(
++        tasks: List<TaskWithDetails>,
++        groupBy: WidgetGroupBy,
++        lists: List<ListEntity>,
++        tags: List<TagEntity>,
++        now: ZonedDateTime,
++        neutralColor: Int,
++    ): List<WidgetGroup> =
++        when (groupBy) {
++            WidgetGroupBy.LIST -> groupByList(tasks, lists, now)
++            WidgetGroupBy.DATE -> groupByDate(tasks, now, neutralColor)
++            WidgetGroupBy.TAG -> groupByTag(tasks, tags, neutralColor, now)
++            WidgetGroupBy.CREATED_AT -> groupByCreatedAt(tasks, now, neutralColor)
++            WidgetGroupBy.PRIORITY -> groupByPriority(tasks, now)
++            WidgetGroupBy.NONE ->
++                if (tasks.isEmpty()) emptyList()
++                else
++                    listOf(
++                        WidgetGroup(
++                            id = "none",
++                            title = "",
++                            colorArgb = neutralColor,
++                            tasks = tasks.map { it.toWidgetTask(now) },
++                        )
++                    )
++        }
++
++    private fun groupByList(
++        tasks: List<TaskWithDetails>,
++        lists: List<ListEntity>,
++        now: ZonedDateTime,
++    ): List<WidgetGroup> {
++        val byId = tasks.groupBy { it.list.id }
++        return lists.mapNotNull { list ->
++            val rows = byId[list.id].orEmpty()
++            if (rows.isEmpty()) null
++            else
++                WidgetGroup(
++                    id = "list:${list.id}",
++                    title = "${list.icon} ${list.name}",
++                    colorArgb = palette(list.color),
++                    tasks = rows.map { it.toWidgetTask(now) },
++                )
++        }
++    }
++
++    private fun groupByDate(tasks: List<TaskWithDetails>, now: ZonedDateTime, neutralColor: Int): List<WidgetGroup> {
++        val today = now.toLocalDate()
++        val dated = tasks.filter { it.task.dueDay != null }.groupBy { it.task.dueDay!! }.toSortedMap()
++        val groups =
++            dated.map { (day, rows) ->
++                WidgetGroup(
++                    id = "date:$day",
++                    title = dateGroupLabel(LocalDate.ofEpochDay(day), today),
++                    colorArgb = neutralColor,
++                    tasks = rows.map { it.toWidgetTask(now) },
++                )
++            }.toMutableList()
++        tasks.filter { it.task.dueDay == null }.takeIf { it.isNotEmpty() }?.let { rows ->
++            groups +=
++                WidgetGroup(
++                    id = "date:none",
++                    title = context.getString(R.string.widget_without_date),
++                    colorArgb = neutralColor,
++                    tasks = rows.map { it.toWidgetTask(now) },
++                )
++        }
++        return groups
++    }
++
++    private fun groupByTag(
++        tasks: List<TaskWithDetails>,
++        tags: List<TagEntity>,
++        neutralColor: Int,
++        now: ZonedDateTime,
++    ): List<WidgetGroup> {
++        val result = mutableListOf<WidgetGroup>()
++        tags.forEach { tag ->
++            val rows = tasks.filter { detail -> detail.tags.any { it.id == tag.id } }
++            if (rows.isNotEmpty()) {
++                result +=
++                    WidgetGroup(
++                        id = "tag:${tag.id}",
++                        title = "#${tag.name}",
++                        colorArgb = palette(tag.color),
++                        tasks = rows.map { it.toWidgetTask(now) },
++                    )
++            }
++        }
++        tasks.filter { it.tags.isEmpty() }.takeIf { it.isNotEmpty() }?.let { rows ->
++            result +=
++                WidgetGroup(
++                    id = "tag:none",
++                    title = context.getString(R.string.widget_without_tag),
++                    colorArgb = neutralColor,
++                    tasks = rows.map { it.toWidgetTask(now) },
++                )
++        }
++        return result
++    }
++
++    private fun groupByPriority(tasks: List<TaskWithDetails>, now: ZonedDateTime): List<WidgetGroup> {
++        val labels =
++            listOf(
++                5 to R.string.priority_high,
++                3 to R.string.priority_medium,
++                1 to R.string.priority_low,
++                0 to R.string.priority_none,
++            )
++        return labels.mapNotNull { (priority, label) ->
++            val rows = tasks.filter { it.task.priority == priority }
++            if (rows.isEmpty()) null
++            else
++                WidgetGroup(
++                    id = "priority:$priority",
++                    title = context.getString(label),
++                    colorArgb = priorityColor(priority),
++                    tasks = rows.map { it.toWidgetTask(now) },
++                )
++        }
++    }
++
++    private fun groupByCreatedAt(tasks: List<TaskWithDetails>, now: ZonedDateTime, neutralColor: Int): List<WidgetGroup> {
++        val today = now.toLocalDate()
++        val buckets = linkedMapOf<String, MutableList<TaskWithDetails>>()
++        tasks.forEach { detail ->
++            val created =
++                Instant.ofEpochMilli(detail.task.createdAt).atZone(ZoneId.systemDefault()).toLocalDate()
++            val key =
++                when {
++                    created == today -> "today"
++                    created == today.minusDays(1) -> "yesterday"
++                    !created.isBefore(today.minusDays(6)) -> "week"
++                    created.year == today.year && created.month == today.month -> "month"
++                    else -> "older"
++                }
++            buckets.getOrPut(key) { mutableListOf() } += detail
++        }
++        val labels =
++            listOf(
++                "today" to R.string.today,
++                "yesterday" to R.string.widget_yesterday,
++                "week" to R.string.widget_created_last_7_days,
++                "month" to R.string.widget_created_this_month,
++                "older" to R.string.widget_created_older,
++            )
++        return labels.mapNotNull { (key, label) ->
++            val rows = buckets[key].orEmpty()
++            if (rows.isEmpty()) null
++            else
++                WidgetGroup(
++                    id = "created:$key",
++                    title = context.getString(label),
++                    colorArgb = neutralColor,
++                    tasks = rows.map { it.toWidgetTask(now) },
++                )
++        }
++    }
++
++    private fun TaskWithDetails.toWidgetTask(now: ZonedDateTime): WidgetTask =
++        WidgetTask(
++            id = task.id,
++            title = task.title,
++            dueLabel = task.dueDay?.let(::formatDueDate).orEmpty(),
++            overdue = isOverdue(this, now),
++            priority = task.priority,
++        )
++
++    private fun formatDueDate(epochDay: Long): String {
++        val date = LocalDate.ofEpochDay(epochDay)
++        val now = LocalDate.now()
++        val locale = currentLocale()
++        val pattern = if (date.year == now.year) "d MMM" else "d MMM yyyy"
++        val raw = date.format(DateTimeFormatter.ofPattern(pattern, locale))
++        return raw.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
++    }
++
++    private fun dateGroupLabel(date: LocalDate, today: LocalDate): String =
++        when (date) {
++            today -> context.getString(R.string.today)
++            today.plusDays(1) -> context.getString(R.string.tomorrow)
++            else -> date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(currentLocale()))
++        }
++
++    private fun isOverdue(detail: TaskWithDetails, now: ZonedDateTime): Boolean {
++        val day = detail.task.dueDay ?: return false
++        val currentDay = now.toLocalDate().toEpochDay()
++        val minute = detail.task.minuteOfDay
++        return if (minute == null) {
++            val occupiedDays = maxOf(1, (detail.task.durationMinutes ?: 1440) / 1440)
++            day + occupiedDays - 1 < currentDay
++        } else {
++            val endMinute = day * 1440 + minute + (detail.task.durationMinutes ?: 0)
++            endMinute < currentDay * 1440 + now.hour * 60 + now.minute
++        }
++    }
++
++    private fun currentLocale(): Locale =
++        context.resources.configuration.locales.get(0) ?: Locale.getDefault()
++
++    companion object {
++        const val NEUTRAL: Int = 0xFF5275FF.toInt()
++        private val PALETTE =
++            intArrayOf(
++                0xFFE8A93A.toInt(),
++                0xFFE15B4F.toInt(),
++                0xFF6E9B7B.toInt(),
++                0xFF5B8BB0.toInt(),
++                0xFF8A6BA8.toInt(),
++                0xFFC4A335.toInt(),
++                0xFF5FAE9E.toInt(),
++                0xFFC77B92.toInt(),
++                0xFF7C93A0.toInt(),
++                0xFFB0794F.toInt(),
++                0xFF7A828A.toInt(),
++                0xFF8FAE4A.toInt(),
++            )
++
++        fun palette(index: Int): Int = PALETTE[index.mod(PALETTE.size)]
++
++        fun priorityColor(priority: Int): Int =
++            when (priority) {
++                5 -> PALETTE[1]
++                3 -> PALETTE[0]
++                1 -> 0xFF5275FF.toInt()
++                else -> 0xFF98989F.toInt()
++            }
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetDateChangeReceiver.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetDateChangeReceiver.kt
+new file mode 100644
+index 0000000..5323633
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetDateChangeReceiver.kt
+@@ -0,0 +1,22 @@
++package com.example.pix.widget
++
++import android.content.BroadcastReceiver
++import android.content.Context
++import android.content.Intent
++import androidx.glance.appwidget.updateAll
++import com.example.pix.PixApplication
++import kotlinx.coroutines.launch
++
++class TaskWidgetDateChangeReceiver : BroadcastReceiver() {
++    override fun onReceive(context: Context, intent: Intent) {
++        val pending = goAsync()
++        val app = context.applicationContext as PixApplication
++        app.backgroundScope.launch {
++            try {
++                TaskWidget().updateAll(context)
++            } finally {
++                pending.finish()
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetModels.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetModels.kt
+new file mode 100644
+index 0000000..8434854
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetModels.kt
+@@ -0,0 +1,23 @@
++package com.example.pix.widget
++
++data class WidgetTask(
++    val id: String,
++    val title: String,
++    val dueLabel: String,
++    val overdue: Boolean,
++    val priority: Int,
++)
++
++data class WidgetGroup(
++    val id: String,
++    val title: String,
++    val colorArgb: Int,
++    val tasks: List<WidgetTask>,
++)
++
++data class WidgetContent(
++    val config: TaskWidgetConfig,
++    val filterLabel: String,
++    val groups: List<WidgetGroup>,
++    val emptyLabel: String,
++)
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetReceiver.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetReceiver.kt
+new file mode 100644
+index 0000000..1b9f0ae
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetReceiver.kt
+@@ -0,0 +1,15 @@
++package com.example.pix.widget
++
++import android.content.Context
++import androidx.glance.appwidget.GlanceAppWidget
++import androidx.glance.appwidget.GlanceAppWidgetReceiver
++
++class TaskWidgetReceiver : GlanceAppWidgetReceiver() {
++    override val glanceAppWidget: GlanceAppWidget = TaskWidget()
++
++    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
++        super.onDeleted(context, appWidgetIds)
++        val store = TaskWidgetConfigStore(context)
++        appWidgetIds.forEach(store::delete)
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetUpdater.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetUpdater.kt
+new file mode 100644
+index 0000000..b3918b0
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetUpdater.kt
+@@ -0,0 +1,48 @@
++package com.example.pix.widget
++
++import android.content.Context
++import android.content.SharedPreferences
++import androidx.room.InvalidationTracker
++import androidx.glance.appwidget.updateAll
++import com.example.pix.data.PixDatabase
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.launch
++
++class TaskWidgetUpdater(
++    private val context: Context,
++    private val database: PixDatabase,
++    private val scope: CoroutineScope,
++) {
++    private var updateJob: Job? = null
++    private var started = false
++    private val appearance = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
++
++    private val roomObserver =
++        object : InvalidationTracker.Observer("tasks", "lists", "tags", "task_tags") {
++            override fun onInvalidated(tables: Set<String>) = requestUpdate()
++        }
++
++    private val appearanceListener =
++        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
++            if (key == "theme" || key == "accent" || key == "textSize") requestUpdate()
++        }
++
++    fun start() {
++        if (started) return
++        started = true
++        database.invalidationTracker.addObserver(roomObserver)
++        appearance.registerOnSharedPreferenceChangeListener(appearanceListener)
++        requestUpdate()
++    }
++
++    fun requestUpdate() {
++        updateJob?.cancel()
++        updateJob =
++            scope.launch {
++                delay(150)
++                runCatching { TaskWidget().updateAll(context) }
++            }
++    }
++}
+diff --git a/app/src/main/res/drawable/ic_widget_add.xml b/app/src/main/res/drawable/ic_widget_add.xml
+new file mode 100644
+index 0000000..08173e5
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_widget_add.xml
+@@ -0,0 +1,9 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="#FFFFFFFF"
++        android:pathData="M11,5h2v6h6v2h-6v6h-2v-6H5v-2h6z" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_widget_checkbox.xml b/app/src/main/res/drawable/ic_widget_checkbox.xml
+new file mode 100644
+index 0000000..cb8a245
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_widget_checkbox.xml
+@@ -0,0 +1,12 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#FFFFFFFF"
++        android:strokeWidth="2.2"
++        android:strokeLineJoin="round"
++        android:pathData="M7,3.5h10A3.5,3.5 0,0 1,20.5 7v10a3.5,3.5 0,0 1,-3.5 3.5H7A3.5,3.5 0,0 1,3.5 17V7A3.5,3.5 0,0 1,7 3.5z" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_widget_more.xml b/app/src/main/res/drawable/ic_widget_more.xml
+new file mode 100644
+index 0000000..b33120b
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_widget_more.xml
+@@ -0,0 +1,9 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="#FFFFFFFF"
++        android:pathData="M12,8a2,2 0,1 0,0 -4a2,2 0,0 0,0 4zM12,14a2,2 0,1 0,0 -4a2,2 0,0 0,0 4zM12,20a2,2 0,1 0,0 -4a2,2 0,0 0,0 4z" />
++</vector>
+diff --git a/app/src/main/res/values-it/strings.xml b/app/src/main/res/values-it/strings.xml
+index 5016749..03f7cf2 100644
+--- a/app/src/main/res/values-it/strings.xml
++++ b/app/src/main/res/values-it/strings.xml
+@@ -252,4 +252,37 @@
+     <string name="google_disconnect">Scollega Google Calendar</string>
+     <string name="google_event">Evento Google Calendar</string>
+     <string name="google_readonly">Solo lettura. Pcix non modifica gli eventi Google.</string>
++
++    <string name="widget_settings">Impostazioni widget</string>
++    <string name="widget_filter_title">Filtra visualizzazione</string>
++    <string name="widget_group_title">Raggruppa per</string>
++    <string name="widget_filter_list">Lista</string>
++    <string name="widget_filter_tag">Tag</string>
++    <string name="widget_group_list">Lista</string>
++    <string name="widget_group_date">Data</string>
++    <string name="widget_group_tag">Tag</string>
++    <string name="widget_group_created">Tempo di creazione</string>
++    <string name="widget_group_none">Nessuno</string>
++    <string name="widget_without_date">Senza data</string>
++    <string name="widget_without_tag">Senza tag</string>
++    <string name="widget_yesterday">Ieri</string>
++    <string name="widget_created_last_7_days">Ultimi 7 giorni</string>
++    <string name="widget_created_this_month">Questo mese</string>
++    <string name="widget_created_older">Più vecchie</string>
++    <string name="widget_empty_today">Nessuna attività oggi</string>
++    <string name="widget_empty_tomorrow">Nessuna attività domani</string>
++    <string name="widget_empty_week">Nessuna attività nei prossimi 7 giorni</string>
++    <string name="widget_empty_generic">Nessuna attività</string>
++    <string name="widget_unavailable">I dati di P©ix non sono temporaneamente disponibili</string>
++    <string name="widget_complete_task">Completa %1$s</string>
++    <string name="priority_high">Alta</string>
++    <string name="priority_medium">Media</string>
++    <string name="priority_low">Bassa</string>
++    <string name="priority_none">Nessuna priorità</string>
++
++    <string name="widget_add_task">Aggiungi task</string>
++    <string name="widget_more_options">Opzioni widget</string>
++
++    <string name="widget_description">Le attività di P©ix, configurabili per filtro e raggruppamento.</string>
++
+ </resources>
+diff --git a/app/src/main/res/values-v31/dimens.xml b/app/src/main/res/values-v31/dimens.xml
+new file mode 100644
+index 0000000..eaf78e4
+--- /dev/null
++++ b/app/src/main/res/values-v31/dimens.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <dimen name="widget_corner_radius">@android:dimen/system_app_widget_background_radius</dimen>
++</resources>
+diff --git a/app/src/main/res/values/dimens.xml b/app/src/main/res/values/dimens.xml
+new file mode 100644
+index 0000000..b905054
+--- /dev/null
++++ b/app/src/main/res/values/dimens.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <dimen name="widget_corner_radius">28dp</dimen>
++</resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index cef56a9..31c6b03 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -252,4 +252,37 @@
+     <string name="google_disconnect">Disconnect Google Calendar</string>
+     <string name="google_event">Google Calendar event</string>
+     <string name="google_readonly">Read-only. Pcix does not edit Google events.</string>
++
++    <string name="widget_settings">Widget settings</string>
++    <string name="widget_filter_title">Filter view</string>
++    <string name="widget_group_title">Group by</string>
++    <string name="widget_filter_list">List</string>
++    <string name="widget_filter_tag">Tag</string>
++    <string name="widget_group_list">List</string>
++    <string name="widget_group_date">Date</string>
++    <string name="widget_group_tag">Tag</string>
++    <string name="widget_group_created">Creation time</string>
++    <string name="widget_group_none">None</string>
++    <string name="widget_without_date">No date</string>
++    <string name="widget_without_tag">No tag</string>
++    <string name="widget_yesterday">Yesterday</string>
++    <string name="widget_created_last_7_days">Last 7 days</string>
++    <string name="widget_created_this_month">This month</string>
++    <string name="widget_created_older">Older</string>
++    <string name="widget_empty_today">No activities today</string>
++    <string name="widget_empty_tomorrow">No activities tomorrow</string>
++    <string name="widget_empty_week">No activities in the next 7 days</string>
++    <string name="widget_empty_generic">No activities</string>
++    <string name="widget_unavailable">P©ix data is temporarily unavailable</string>
++    <string name="widget_complete_task">Complete %1$s</string>
++    <string name="priority_high">High</string>
++    <string name="priority_medium">Medium</string>
++    <string name="priority_low">Low</string>
++    <string name="priority_none">No priority</string>
++
++    <string name="widget_add_task">Add task</string>
++    <string name="widget_more_options">Widget options</string>
++
++    <string name="widget_description">Tasks from P©ix, configurable by filter and grouping.</string>
++
+ </resources>
+diff --git a/app/src/main/res/xml/task_widget_info.xml b/app/src/main/res/xml/task_widget_info.xml
+new file mode 100644
+index 0000000..3f53c10
+--- /dev/null
++++ b/app/src/main/res/xml/task_widget_info.xml
+@@ -0,0 +1,15 @@
++<?xml version="1.0" encoding="utf-8"?>
++<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
++    android:minWidth="180dp"
++    android:minHeight="120dp"
++    android:minResizeWidth="140dp"
++    android:minResizeHeight="100dp"
++    android:targetCellWidth="4"
++    android:targetCellHeight="4"
++    android:updatePeriodMillis="0"
++    android:initialLayout="@layout/glance_default_loading_layout"
++    android:resizeMode="horizontal|vertical"
++    android:widgetCategory="home_screen"
++    android:description="@string/widget_description"
++    android:configure="com.example.pix.widget.TaskWidgetConfigureActivity"
++    android:widgetFeatures="reconfigurable" />
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index bb96bc0..ce58a9b 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -18,6 +18,7 @@ okhttp = "4.12.0"
+ credentials = "1.5.0"
+ googleid = "1.1.1"
+ playAuth = "21.4.0"
++glance = "1.2.0"
+ 
+ [libraries]
+ androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+@@ -49,6 +50,7 @@ androidx-credentials = { module = "androidx.credentials:credentials", version.re
+ androidx-credentials-play = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
+ google-id = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
+ play-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playAuth" }
++androidx-glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
+ 
+ [plugins]
+ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

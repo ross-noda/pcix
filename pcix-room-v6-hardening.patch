@@ -1,0 +1,589 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 5c7f2c2..521e2e6 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -29,6 +29,10 @@ android {
+         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${secret("google.webClientId")}\"")
+     }
+ 
++    sourceSets {
++        getByName("androidTest").assets.srcDir("$projectDir/schemas")
++    }
++
+     buildFeatures {
+         compose = true
+         buildConfig = true
+diff --git a/app/src/androidTest/java/com/example/pix/MigrationTest.kt b/app/src/androidTest/java/com/example/pix/MigrationTest.kt
+index 8b2e212..c509cdf 100644
+--- a/app/src/androidTest/java/com/example/pix/MigrationTest.kt
++++ b/app/src/androidTest/java/com/example/pix/MigrationTest.kt
+@@ -1,82 +1,99 @@
+ package com.example.pix
+ 
+-import android.content.Context
+ import androidx.room.Room
++import androidx.room.testing.MigrationTestHelper
++import androidx.sqlite.db.SupportSQLiteDatabase
+ import androidx.test.platform.app.InstrumentationRegistry
+ import com.example.pix.data.*
+ import kotlinx.coroutines.runBlocking
+-import org.json.JSONObject
+ import org.junit.Assert.*
+ import org.junit.Test
+ 
+ class MigrationTest {
++    private val instrumentation = InstrumentationRegistry.getInstrumentation()
++    private val helper = MigrationTestHelper(instrumentation, PixDatabase::class.java)
++    private val migrations =
++        arrayOf(
++            PixDatabase.MIGRATION_1_2,
++            PixDatabase.MIGRATION_2_3,
++            PixDatabase.MIGRATION_3_4,
++            PixDatabase.MIGRATION_4_5,
++            PixDatabase.MIGRATION_5_6,
++        )
++
+     @Test fun versionOneDataSurvivesMigration() = verifyMigration(1)
+ 
+     @Test fun versionTwoDataSurvivesMigration() = verifyMigration(2)
+ 
+     @Test fun versionThreeDataSurvivesMigration() = verifyMigration(3)
+ 
++    @Test fun versionFourDataSurvivesMigration() = verifyMigration(4)
++
+     @Test fun versionFiveDataSurvivesMigration() = verifyMigration(5)
+ 
+-    private fun verifyMigration(version: Int) = runBlocking {
+-        val instrumentation = InstrumentationRegistry.getInstrumentation()
++    @Test
++    fun versionSixOutboxAndCalendarCachePersistAcrossReopen() = runBlocking {
+         val context = instrumentation.targetContext
+-        val name = "migration-${System.nanoTime()}.db"
++        val name = "migration-v6-reopen-${System.nanoTime()}.db"
+         try {
+-            val schema =
+-                JSONObject(
+-                        instrumentation.context.assets
+-                            .open("schema-v$version.json")
+-                            .bufferedReader()
+-                            .use { it.readText() }
+-                    )
+-                    .getJSONObject("database")
+-            context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null).use { db ->
+-                val entities = schema.getJSONArray("entities")
+-                for (i in 0 until entities.length()) {
+-                    val entity = entities.getJSONObject(i)
+-                    val table = entity.getString("tableName")
+-                    db.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", table))
+-                    val indices = entity.optJSONArray("indices") ?: org.json.JSONArray()
+-                    for (j in 0 until indices.length()) db.execSQL(
+-                        indices
+-                            .getJSONObject(j)
+-                            .getString("createSql")
+-                            .replace("\${TABLE_NAME}", table)
+-                    )
+-                }
+-                val queries = schema.getJSONArray("setupQueries")
+-                for (i in 0 until queries.length()) db.execSQL(queries.getString(i))
++            helper.createDatabase(name, 6).use { db ->
++                db.execSQL(
++                    "INSERT INTO sync_outbox(id,entityType,entityId,operation,payload,createdAt,attemptCount,lastAttemptAt) VALUES('outbox-1','tasks','task-1','UPSERT','{}',100,2,200)"
++                )
+                 db.execSQL(
+-                    "INSERT INTO lists(id,name,color,sortOrder) VALUES(?, 'Inbox',8,0)",
+-                    arrayOf(INBOX_ID),
++                    "INSERT INTO sync_state(accountId,checkpoint,lastSuccessAt) VALUES('account-1','checkpoint-1',300)"
+                 )
+                 db.execSQL(
+-                    "INSERT INTO tasks(id,title,notes,listId,dueDay,minuteOfDay,priority,isCompleted,completedAt,sortOrder,createdAt,updatedAt) VALUES('old-task','Keep me','Notes',?,NULL,NULL,0,0,NULL,0,0,0)",
+-                    arrayOf(INBOX_ID),
++                    "INSERT INTO google_calendars(id,summary,colorArgb,timeZone,enabled,accessRole) VALUES('calendar-1','Legacy calendar',123,'Europe/Rome',1,'reader')"
++                )
++                db.execSQL(
++                    "INSERT INTO google_events(id,calendarId,title,description,location,startDay,endDay,startMinute,endMinute,allDay,status,cancelled,updatedAt,recurringEventId,colorArgb) VALUES('event-1','calendar-1','Event','Description','Here',22000,22001,600,660,0,'confirmed',0,400,NULL,456)"
++                )
++                db.execSQL(
++                    "INSERT INTO google_sync_state(calendarId,syncToken,lastSyncAt) VALUES('calendar-1','token-1',500)"
+                 )
+-                db.version = version
+             }
++
+             val db =
+                 Room.databaseBuilder(context, PixDatabase::class.java, name)
+-                    .addMigrations(
+-                        PixDatabase.MIGRATION_1_2,
+-                        PixDatabase.MIGRATION_2_3,
+-                        PixDatabase.MIGRATION_3_4,
+-                        PixDatabase.MIGRATION_4_5,
+-                        PixDatabase.MIGRATION_5_6,
+-                    )
++                    .addMigrations(*migrations)
+                     .build()
+             try {
+-                assertEquals("Keep me", db.dao().task("old-task")!!.title)
+-                assertEquals("Notes", db.dao().task("old-task")!!.notes)
+-                assertNull(db.dao().task("old-task")!!.durationMinutes)
+-                assertNull(db.dao().task("old-task")!!.matrixUrgent)
+-                assertNull(db.dao().task("old-task")!!.matrixImportant)
+-                assertNull(db.dao().task("old-task")!!.seriesId)
+-                assertFalse(db.dao().task("old-task")!!.isTemplate)
+-                db.dao().saveReceipt(ReminderReceipt("old-task", 42))
+-                assertEquals(42L, db.dao().receipt("old-task")!!.triggerAt)
++                val pending = db.syncDao().pending().single()
++                assertEquals("outbox-1", pending.id)
++                assertEquals("tasks", pending.entityType)
++                assertEquals("task-1", pending.entityId)
++                assertEquals("UPSERT", pending.operation)
++                assertEquals("{}", pending.payload)
++                assertEquals(100L, pending.createdAt)
++                assertEquals(2, pending.attemptCount)
++                assertEquals(200L, pending.lastAttemptAt)
++
++                val syncState = db.syncDao().state("account-1")!!
++                assertEquals("checkpoint-1", syncState.checkpoint)
++                assertEquals(300L, syncState.lastSuccessAt)
++
++                val calendar = db.googleDao().calendars().single()
++                assertEquals("calendar-1", calendar.id)
++                assertEquals("Legacy calendar", calendar.summary)
++                assertEquals("Europe/Rome", calendar.timeZone)
++                assertTrue(calendar.enabled)
++                assertEquals("reader", calendar.accessRole)
++
++                val event = db.googleDao().events("calendar-1").single()
++                assertEquals("event-1", event.id)
++                assertEquals("Event", event.title)
++                assertEquals(22000L, event.startDay)
++                assertEquals(22001L, event.endDay)
++                assertEquals(600, event.startMinute)
++                assertEquals(660, event.endMinute)
++                assertFalse(event.allDay)
++                assertFalse(event.cancelled)
++                assertEquals(400L, event.updatedAt)
++
++                val googleState = db.googleDao().syncState("calendar-1")!!
++                assertEquals("token-1", googleState.syncToken)
++                assertEquals(500L, googleState.lastSyncAt)
+             } finally {
+                 db.close()
+             }
+@@ -84,4 +101,329 @@ class MigrationTest {
+             context.deleteDatabase(name)
+         }
+     }
++
++    private fun verifyMigration(version: Int) {
++        val name = "migration-v${version}-to-v6-${System.nanoTime()}.db"
++        try {
++            helper.createDatabase(name, version).use { db -> seedLegacyData(db, version) }
++
++            helper.runMigrationsAndValidate(name, 6, true, *migrations).use { db ->
++                assertCoreData(db, version)
++                assertVersionSpecificData(db, version)
++                assertVersionSixInfrastructure(db)
++                assertNoForeignKeyViolations(db)
++            }
++        } finally {
++            instrumentation.targetContext.deleteDatabase(name)
++        }
++    }
++
++    private fun seedLegacyData(db: SupportSQLiteDatabase, version: Int) {
++        val listColumns = if (version >= 4) "id,name,icon,color,sortOrder" else "id,name,color,sortOrder"
++        val listValues =
++            if (version >= 4) "'$LIST_ID','Legacy list','🎓',123,17"
++            else "'$LIST_ID','Legacy list',123,17"
++        db.execSQL("INSERT INTO lists($listColumns) VALUES($listValues)")
++        db.execSQL(
++            "INSERT INTO tags(id,name,normalizedName,color) VALUES('$TAG_ID','Legacy Tag','legacy tag',456)"
++        )
++
++        insertTask(
++            db = db,
++            version = version,
++            id = TASK_ID,
++            title = "Keep me",
++            notes = "Notes survive",
++            seriesId = null,
++            originalDay = null,
++            isTemplate = false,
++        )
++        db.execSQL("INSERT INTO task_tags(taskId,tagId) VALUES('$TASK_ID','$TAG_ID')")
++        db.execSQL(
++            "INSERT INTO subtasks(id,taskId,title,isCompleted,sortOrder,createdAt,updatedAt) VALUES('$SUBTASK_ID','$TASK_ID','Legacy subtask',1,31,333,444)"
++        )
++
++        if (version >= 2) {
++            db.execSQL(
++                "INSERT INTO reminder_receipts(taskId,triggerAt) VALUES('$TASK_ID',777)"
++            )
++        }
++
++        if (version >= 3) {
++            insertTask(
++                db = db,
++                version = version,
++                id = TEMPLATE_ID,
++                title = "Recurring template",
++                notes = "Template notes",
++                seriesId = SERIES_ID,
++                originalDay = 21000,
++                isTemplate = true,
++            )
++            insertTask(
++                db = db,
++                version = version,
++                id = OCCURRENCE_ID,
++                title = "Recurring occurrence",
++                notes = "Occurrence notes",
++                seriesId = SERIES_ID,
++                originalDay = 21001,
++                isTemplate = false,
++            )
++            db.execSQL(
++                "INSERT INTO recurring_series(id,rule,anchorDay,templateTaskId,endBefore) VALUES('$SERIES_ID','FREQ=WEEKLY;BYDAY=MO,WE',21000,'$TEMPLATE_ID',22000)"
++            )
++        }
++
++        if (version >= 4) {
++            db.execSQL(
++                "INSERT INTO task_images(id,taskId,fileName,createdAt) VALUES('$IMAGE_ID','$TASK_ID','legacy-image.jpg',888)"
++            )
++        }
++    }
++
++    private fun insertTask(
++        db: SupportSQLiteDatabase,
++        version: Int,
++        id: String,
++        title: String,
++        notes: String,
++        seriesId: String?,
++        originalDay: Long?,
++        isTemplate: Boolean,
++    ) {
++        val columns =
++            mutableListOf(
++                "id",
++                "title",
++                "notes",
++                "listId",
++                "dueDay",
++                "minuteOfDay",
++                "priority",
++                "isCompleted",
++                "completedAt",
++            )
++        val values =
++            mutableListOf(
++                sqlText(id),
++                sqlText(title),
++                sqlText(notes),
++                sqlText(LIST_ID),
++                "21000",
++                "555",
++                "3",
++                "0",
++                "NULL",
++            )
++
++        if (version >= 3) {
++            columns += listOf("seriesId", "originalDay", "isTemplate", "isSkipped")
++            values +=
++                listOf(
++                    seriesId?.let(::sqlText) ?: "NULL",
++                    originalDay?.toString() ?: "NULL",
++                    if (isTemplate) "1" else "0",
++                    "0",
++                )
++        }
++        if (version >= 4) {
++            columns += listOf("matrixUrgent", "matrixImportant")
++            values += listOf("1", "0")
++        }
++        if (version >= 5) {
++            columns += "durationMinutes"
++            values += "90"
++        }
++
++        columns += listOf("sortOrder", "createdAt", "updatedAt")
++        values += listOf("29", "111", "222")
++        db.execSQL("INSERT INTO tasks(${columns.joinToString()}) VALUES(${values.joinToString()})")
++    }
++
++    private fun assertCoreData(db: SupportSQLiteDatabase, version: Int) {
++        db.query("SELECT * FROM lists WHERE id='$LIST_ID'").use { cursor ->
++            assertTrue(cursor.moveToFirst())
++            assertEquals("Legacy list", cursor.text("name"))
++            assertEquals(123, cursor.int("color"))
++            assertEquals(17L, cursor.long("sortOrder"))
++            assertEquals(if (version >= 4) "🎓" else "📋", cursor.text("icon"))
++            assertEquals(0L, cursor.long("createdAt"))
++            assertEquals(0L, cursor.long("updatedAt"))
++        }
++
++        db.query("SELECT * FROM tags WHERE id='$TAG_ID'").use { cursor ->
++            assertTrue(cursor.moveToFirst())
++            assertEquals("Legacy Tag", cursor.text("name"))
++            assertEquals("legacy tag", cursor.text("normalizedName"))
++            assertEquals(456, cursor.int("color"))
++            assertEquals(0L, cursor.long("createdAt"))
++            assertEquals(0L, cursor.long("updatedAt"))
++        }
++
++        db.query("SELECT * FROM tasks WHERE id='$TASK_ID'").use { cursor ->
++            assertTrue(cursor.moveToFirst())
++            assertEquals("Keep me", cursor.text("title"))
++            assertEquals("Notes survive", cursor.text("notes"))
++            assertEquals(LIST_ID, cursor.text("listId"))
++            assertEquals(21000L, cursor.long("dueDay"))
++            assertEquals(555, cursor.int("minuteOfDay"))
++            assertEquals(3, cursor.int("priority"))
++            assertEquals(29L, cursor.long("sortOrder"))
++            assertEquals(111L, cursor.long("createdAt"))
++            assertEquals(222L, cursor.long("updatedAt"))
++            assertEquals(0, cursor.int("isCompleted"))
++            assertEquals(0, cursor.int("isTemplate"))
++            assertEquals(0, cursor.int("isSkipped"))
++        }
++
++        assertEquals(
++            1L,
++            db.scalarLong(
++                "SELECT COUNT(*) FROM task_tags WHERE taskId='$TASK_ID' AND tagId='$TAG_ID'"
++            ),
++        )
++        db.query("SELECT * FROM subtasks WHERE id='$SUBTASK_ID'").use { cursor ->
++            assertTrue(cursor.moveToFirst())
++            assertEquals(TASK_ID, cursor.text("taskId"))
++            assertEquals("Legacy subtask", cursor.text("title"))
++            assertEquals(1, cursor.int("isCompleted"))
++            assertEquals(31L, cursor.long("sortOrder"))
++            assertEquals(333L, cursor.long("createdAt"))
++            assertEquals(444L, cursor.long("updatedAt"))
++        }
++    }
++
++    private fun assertVersionSpecificData(db: SupportSQLiteDatabase, version: Int) {
++        if (version >= 2) {
++            assertEquals(
++                777L,
++                db.scalarLong(
++                    "SELECT triggerAt FROM reminder_receipts WHERE taskId='$TASK_ID'"
++                ),
++            )
++        } else {
++            assertEquals(0L, db.scalarLong("SELECT COUNT(*) FROM reminder_receipts"))
++        }
++
++        if (version >= 3) {
++            db.query("SELECT * FROM recurring_series WHERE id='$SERIES_ID'").use { cursor ->
++                assertTrue(cursor.moveToFirst())
++                assertEquals("FREQ=WEEKLY;BYDAY=MO,WE", cursor.text("rule"))
++                assertEquals(21000L, cursor.long("anchorDay"))
++                assertEquals(TEMPLATE_ID, cursor.text("templateTaskId"))
++                assertEquals(22000L, cursor.long("endBefore"))
++                assertEquals(0L, cursor.long("updatedAt"))
++            }
++            db.query("SELECT * FROM tasks WHERE id='$TEMPLATE_ID'").use { cursor ->
++                assertTrue(cursor.moveToFirst())
++                assertEquals(SERIES_ID, cursor.text("seriesId"))
++                assertEquals(21000L, cursor.long("originalDay"))
++                assertEquals(1, cursor.int("isTemplate"))
++            }
++            db.query("SELECT * FROM tasks WHERE id='$OCCURRENCE_ID'").use { cursor ->
++                assertTrue(cursor.moveToFirst())
++                assertEquals(SERIES_ID, cursor.text("seriesId"))
++                assertEquals(21001L, cursor.long("originalDay"))
++                assertEquals(0, cursor.int("isTemplate"))
++            }
++        } else {
++            assertEquals(0L, db.scalarLong("SELECT COUNT(*) FROM recurring_series"))
++        }
++
++        db.query("SELECT matrixUrgent,matrixImportant,durationMinutes FROM tasks WHERE id='$TASK_ID'")
++            .use { cursor ->
++                assertTrue(cursor.moveToFirst())
++                if (version >= 4) {
++                    assertEquals(1, cursor.int("matrixUrgent"))
++                    assertEquals(0, cursor.int("matrixImportant"))
++                } else {
++                    assertTrue(cursor.isNull(cursor.getColumnIndexOrThrow("matrixUrgent")))
++                    assertTrue(cursor.isNull(cursor.getColumnIndexOrThrow("matrixImportant")))
++                }
++                if (version >= 5) {
++                    assertEquals(90, cursor.int("durationMinutes"))
++                } else {
++                    assertTrue(cursor.isNull(cursor.getColumnIndexOrThrow("durationMinutes")))
++                }
++            }
++
++        if (version >= 4) {
++            db.query("SELECT * FROM task_images WHERE id='$IMAGE_ID'").use { cursor ->
++                assertTrue(cursor.moveToFirst())
++                assertEquals(TASK_ID, cursor.text("taskId"))
++                assertEquals("legacy-image.jpg", cursor.text("fileName"))
++                assertEquals(888L, cursor.long("createdAt"))
++            }
++        } else {
++            assertEquals(0L, db.scalarLong("SELECT COUNT(*) FROM task_images"))
++        }
++    }
++
++    private fun assertVersionSixInfrastructure(db: SupportSQLiteDatabase) {
++        val expectedTables =
++            setOf(
++                "sync_outbox",
++                "sync_state",
++                "google_calendars",
++                "google_events",
++                "google_sync_state",
++            )
++        val actual = mutableSetOf<String>()
++        db.query(
++                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sync_outbox','sync_state','google_calendars','google_events','google_sync_state')"
++            )
++            .use { cursor ->
++                while (cursor.moveToNext()) actual += cursor.getString(0)
++            }
++        assertEquals(expectedTables, actual)
++
++        db.execSQL(
++            "INSERT INTO sync_outbox(id,entityType,entityId,operation,payload,createdAt,attemptCount,lastAttemptAt) VALUES('migration-outbox','tasks','$TASK_ID','UPSERT','{}',1,0,NULL)"
++        )
++        db.execSQL(
++            "INSERT INTO sync_state(accountId,checkpoint,lastSuccessAt) VALUES('migration-account','checkpoint',2)"
++        )
++        assertEquals(
++            1L,
++            db.scalarLong("SELECT COUNT(*) FROM sync_outbox WHERE id='migration-outbox'"),
++        )
++        assertEquals(
++            1L,
++            db.scalarLong("SELECT COUNT(*) FROM sync_state WHERE accountId='migration-account'"),
++        )
++    }
++
++    private fun assertNoForeignKeyViolations(db: SupportSQLiteDatabase) {
++        db.query("PRAGMA foreign_key_check").use { cursor ->
++            assertFalse("Foreign key violation after migration", cursor.moveToFirst())
++        }
++    }
++
++    private fun SupportSQLiteDatabase.scalarLong(sql: String): Long =
++        query(sql).use { cursor ->
++            assertTrue("Expected one row for: $sql", cursor.moveToFirst())
++            cursor.getLong(0)
++        }
++
++    private fun android.database.Cursor.text(column: String): String =
++        getString(getColumnIndexOrThrow(column))
++
++    private fun android.database.Cursor.int(column: String): Int = getInt(getColumnIndexOrThrow(column))
++
++    private fun android.database.Cursor.long(column: String): Long =
++        getLong(getColumnIndexOrThrow(column))
++
++    private fun sqlText(value: String): String = "'${value.replace("'", "''")}'"
++
++    companion object {
++        private const val LIST_ID = "list-legacy"
++        private const val TAG_ID = "tag-legacy"
++        private const val TASK_ID = "task-legacy"
++        private const val SUBTASK_ID = "subtask-legacy"
++        private const val SERIES_ID = "series-legacy"
++        private const val TEMPLATE_ID = "template-legacy"
++        private const val OCCURRENCE_ID = "occurrence-legacy"
++        private const val IMAGE_ID = "image-legacy"
++    }
+ }
+diff --git a/docs/RECOVERY_AUDIT.md b/docs/RECOVERY_AUDIT.md
+index 9129b28..f54f705 100644
+--- a/docs/RECOVERY_AUDIT.md
++++ b/docs/RECOVERY_AUDIT.md
+@@ -135,7 +135,7 @@ Sono presenti e collegati:
+ |---|---|---|
+ | Application wiring / DI manuale | IMPLEMENTATO E CORRETTO | `PixApplication` collega DB, repository, auth, sync, Google Calendar, reminder e widget |
+ | MainActivity auth gate | IMPLEMENTATO E CORRETTO | splash/auth/import/PixApp selezionati in base a config, sessione e legacy state |
+-| Room v6 + schema export | IMPLEMENTATO E CORRETTO | schema 1..6 presenti; migrazione 5→6 presente |
++| Room v6 + schema export | IMPLEMENTATO E CORRETTO | `app/schemas/com.example.pix.data.PixDatabase/6.json` presente; identity hash `da3f65b65c36ccee81834dab02f04617` coincide con il `PixDatabase_Impl` già generato; catene v1→v6..v5→v6 verificate |
+ | TaskRepository → outbox atomica | IMPLEMENTATO E CORRETTO | `PixDatabase.tracked` esegue snapshot, mutazione e record outbox nella stessa transazione Room |
+ | Legacy local-data ownership/import | IMPLEMENTATO E CORRETTO | `SessionCoordinator`/`AccountStore`; test instrumented sorgente presente |
+ | Auth email/password | BUG | implementata, ma le chiamate HTTP sincrone possono essere eseguite dal Main dispatcher dalla UI |
+@@ -165,7 +165,7 @@ Sono presenti e collegati:
+ | ReminderEngine locale | IMPLEMENTATO E CORRETTO | infrastruttura reale e testata storicamente; nessun motivo di riscriverla per la fase cloud |
+ | Documentazione architettura corrente | BUG | `README.md`, `docs/ARCHITECTURE.md`, `docs/BACKEND_SETUP.md` contraddicono il codice attuale |
+ | Unit test cloud/auth HTTP | MANCANTE | dipendenza MockWebServer presente ma nessun test esercita `AuthRepository`, `RemoteDataSource`, `SyncEngine`, `CloudHttp` con HTTP reale simulato |
+-| Instrumented migration/outbox | IMPLEMENTATO MA NON COLLEGATO | sorgenti test presenti, ma nessun report connected corrente dimostra l'esecuzione dopo le ultime modifiche |
++| Instrumented migration/outbox | PARZIALE | test migration rafforzati con `MigrationTestHelper` per v1→v6, v2→v6, v3→v6, v4→v6 e v5→v6; l'esecuzione connected resta bloccata nel sandbox perché Gradle 9.5.0 non è scaricabile e non è disponibile un device/emulatore |
+ | Test live Supabase/RLS/two-device | BLOCCATO SOLO DA CONFIGURAZIONE ESTERNA | richiede progetto Supabase configurato e almeno due client/device |
+ | Test live Google Calendar | BLOCCATO SOLO DA CONFIGURAZIONE ESTERNA | richiede OAuth consent/config e device/account Google |
+ 
+@@ -401,10 +401,65 @@ Solo dopo questi interventi conviene riprendere nuove feature.
+ 
+ ---
+ 
+-## 14. File modificati da questo audit
++## 14. File modificati dall'audit iniziale
+ 
+ Creato esclusivamente:
+ 
+ - `docs/RECOVERY_AUDIT.md`
+ 
+-Nessun file Kotlin, SQL, Gradle, Manifest, risorsa UI, schema Room o test è stato modificato.
++Nell'audit iniziale nessun file Kotlin, SQL, Gradle, Manifest, risorsa UI, schema Room o test era stato modificato.
++
++---
++
++## 15. Follow-up — hardening Room v6
++
++Verifica eseguita il 22 settembre 2026 sulla base Room dichiarata come versione 6. `prompt-260922-1.md` continua a non essere presente nel repository ricevuto; questa fase è quindi basata sul codice reale, sugli schema Room esportati e sul presente recovery audit.
++
++### Schema v6
++
++- `app/schemas/com.example.pix.data.PixDatabase/6.json` esiste.
++- L'identity hash dello schema esportato è `da3f65b65c36ccee81834dab02f04617` e coincide con quello del `PixDatabase_Impl` già generato nel repository.
++- Le `CREATE TABLE` e `CREATE INDEX` dello schema v6 coincidono con quelle del `PixDatabase_Impl` generato per le entity correnti.
++- Non è presente `fallbackToDestructiveMigration()`.
++- La ricostruzione SQLite delle catene v1→v6, v2→v6, v3→v6, v4→v6 e v5→v6 produce la stessa struttura logica attesa da Room v6. Le differenze di ordine fisico delle colonne aggiunte con `ALTER TABLE` non cambiano la `TableInfo` validata da Room.
++- `PRAGMA foreign_key_check` non rileva violazioni sui dataset di migrazione usati per la verifica host-side.
++
++### Dati verificati nelle catene storiche
++
++La verifica host-side con gli schema esportati e le SQL delle migration correnti conserva, quando la versione di partenza già li supporta:
++
++- task e campi base;
++- liste e `sortOrder`;
++- tag e relazione N:N `task_tags`;
++- sottotask e relativo ordine;
++- `reminder_receipts` dalla v2;
++- serie ricorrenti, template e occorrenze dalla v3;
++- `matrixUrgent` / `matrixImportant`, icona lista e metadata immagini dalla v4;
++- `durationMinutes` dalla v5.
++
++La migration 5→6 aggiunge inoltre senza distruzione `sync_outbox`, `sync_state`, `google_calendars`, `google_events` e `google_sync_state`, oltre ai timestamp richiesti su liste, tag e serie. Non esistono dati outbox/Google da preservare nelle versioni 1–5 perché tali tabelle compaiono per la prima volta nella v6; è stato aggiunto un test di persistenza/reopen della v6 per verificare le relative mapping Room.
++
++### Correzioni applicate
++
++Non è stata modificata alcuna migration: `MIGRATION_1_2` … `MIGRATION_5_6` risultano coerenti e una modifica non necessaria aumenterebbe il rischio per installazioni esistenti. Non è stato incrementato il numero di versione del database e `6.json` non è stato alterato.
++
++È stata invece rafforzata la rete di sicurezza:
++
++- `app/build.gradle.kts`: gli schema esportati reali di `app/schemas/` sono esposti agli instrumented test come assets;
++- `app/src/androidTest/java/com/example/pix/MigrationTest.kt`: usa `MigrationTestHelper`, valida esplicitamente v1→v6, v2→v6, v3→v6, v4→v6 e v5→v6, controlla i dati sopra, le foreign key e le strutture v6; aggiunge inoltre il reopen test per outbox/sync state/cache Google della v6.
++
++### Verifica finale richiesta
++
++Eseguiti realmente nel sandbox:
++
++- `./gradlew assembleDebug` → bloccato prima della configurazione: il wrapper tenta di scaricare Gradle 9.5.0 da `services.gradle.org`, non raggiungibile nel sandbox (`UnknownHostException`).
++- `./gradlew testDebugUnitTest` → stesso blocco wrapper.
++- `./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.pix.MigrationTest` → stesso blocco wrapper; inoltre il sandbox non dispone di un device/emulatore.
++
++Come verifica indipendente dalla toolchain Android è stata eseguita la ricostruzione SQLite con dataset relazionali per tutte e cinque le catene richieste: v1→v6, v2→v6, v3→v6, v4→v6 e v5→v6 hanno tutte superato controllo schema, dati e foreign key.
++
++### Problemi ancora aperti in questa fase
++
++- I nuovi instrumented migration test devono essere eseguiti su una macchina con Gradle 9.5.0/Android SDK e device o emulatore disponibili per ottenere la conferma runtime Android.
++- Il repository ricevuto continua a non contenere `prompt-260922-1.md`, quindi non è stato possibile confrontare eventuali requisiti Room aggiuntivi presenti solo in quel documento.
++- Nessun problema accertato richiede al momento una v7 o una modifica delle migration esistenti.

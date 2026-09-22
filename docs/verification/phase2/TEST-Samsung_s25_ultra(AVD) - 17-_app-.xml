@@ -1,0 +1,76 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="17" failures="0" errors="0" skipped="0" time="21.654" timestamp="2026-09-17T14:31:23" hostname="localhost">
+  <testsuite name="com.example.pix.CalendarUiTest" tests="1" failures="0" errors="0" skipped="0" time="13.437" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="selectedDayPrepopulatesQuickAddAndSurvivesMonthNavigation" classname="com.example.pix.CalendarUiTest" time="13.437" />
+  </testsuite>
+  <testsuite name="com.example.pix.EditorViewModelTest" tests="1" failures="0" errors="0" skipped="0" time="0.78" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="rapidEditsFlushWithoutRevertingCompletionAndUntouchedDraftDoesNotRevertSnooze" classname="com.example.pix.EditorViewModelTest" time="0.78" />
+  </testsuite>
+  <testsuite name="com.example.pix.ExampleInstrumentedTest" tests="1" failures="0" errors="0" skipped="0" time="0.0" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="useAppContext" classname="com.example.pix.ExampleInstrumentedTest" time="0.0" />
+  </testsuite>
+  <testsuite name="com.example.pix.MigrationTest" tests="1" failures="0" errors="0" skipped="0" time="0.176" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="versionOneDataSurvivesMigration" classname="com.example.pix.MigrationTest" time="0.176" />
+  </testsuite>
+  <testsuite name="com.example.pix.NotificationPlatformTest" tests="2" failures="0" errors="0" skipped="0" time="0.479" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="actualNotificationActionCompletesPersistedTask" classname="com.example.pix.NotificationPlatformTest" time="0.101" />
+    <testcase name="snoozeAndEditRescheduleTheRealPlatformDeadline" classname="com.example.pix.NotificationPlatformTest" time="0.378" />
+  </testsuite>
+  <testsuite name="com.example.pix.QuickAddTest" tests="1" failures="0" errors="0" skipped="0" time="5.377" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="quickAddPersistsAndCompletionCanBeUndone" classname="com.example.pix.QuickAddTest" time="5.377" />
+  </testsuite>
+  <testsuite name="com.example.pix.ReminderEngineTest" tests="5" failures="0" errors="0" skipped="0" time="0.299" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="alarmAndWorkerDeliverOnceAndStaleAlarmIsIgnored" classname="com.example.pix.ReminderEngineTest" time="0.084" />
+    <testcase name="editingReschedulesAndCompletionDeletionOrAllDayCancel" classname="com.example.pix.ReminderEngineTest" time="0.027" />
+    <testcase name="staleActionsAreIgnoredAndSnoozeUpdatesDatabase" classname="com.example.pix.ReminderEngineTest" time="0.081" />
+    <testcase name="overdueKnownReminderIsRecoveredAfterRebootButOldUnscheduledTasksAreNot" classname="com.example.pix.ReminderEngineTest" time="0.08" />
+    <testcase name="deniedNotificationsNeverMarkDelivered" classname="com.example.pix.ReminderEngineTest" time="0.027" />
+  </testsuite>
+  <testsuite name="com.example.pix.RepositoryTest" tests="5" failures="0" errors="0" skipped="0" time="0.179" timestamp="2026-09-17T14:31:23" hostname="localhost">
+    <properties>
+      <property name="device" value="Samsung_s25_ultra(AVD) - 17" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="inboxIsProtectedAndDuplicationCopiesRelations" classname="com.example.pix.RepositoryTest" time="0.051" />
+    <testcase name="deleteListMovesCompletedAndActiveTasks" classname="com.example.pix.RepositoryTest" time="0.026" />
+    <testcase name="roomDateFiltersAndSearchCoverMetadata" classname="com.example.pix.RepositoryTest" time="0.026" />
+    <testcase name="tagNormalizationAndCascade" classname="com.example.pix.RepositoryTest" time="0.076" />
+    <testcase name="editDoesNotRevertCompletionAndSubtasksAreIndependent" classname="com.example.pix.RepositoryTest" time="0.0" />
+  </testsuite>
+</testsuites>

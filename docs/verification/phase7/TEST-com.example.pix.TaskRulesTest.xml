@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.pix.TaskRulesTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-19T07:59:17.520Z" hostname="ross-XPS-13-9360" time="0.013">
+  <properties/>
+  <testcase name="daylightSavingDoesNotShortenCalendarDay" classname="com.example.pix.TaskRulesTest" time="0.001"/>
+  <testcase name="sevenDaysAcrossLeapDayAndYear" classname="com.example.pix.TaskRulesTest" time="0.001"/>
+  <testcase name="titleBounds" classname="com.example.pix.TaskRulesTest" time="0.001"/>
+  <testcase name="timeDeadlineUsesLocalMinute" classname="com.example.pix.TaskRulesTest" time="0.004"/>
+  <testcase name="unicodeTagsShareIdentity" classname="com.example.pix.TaskRulesTest" time="0.005"/>
+  <testcase name="searchEscapesWildcards" classname="com.example.pix.TaskRulesTest" time="0.001"/>
+  <testcase name="allDayIsNotOverdueUntilFollowingDay" classname="com.example.pix.TaskRulesTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

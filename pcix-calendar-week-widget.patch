@@ -1,0 +1,1645 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 07b5eda..dd614f2 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -22,7 +22,8 @@
+         </provider>
+         <receiver
+             android:name=".widget.TaskWidgetReceiver"
+-            android:exported="true">
++            android:exported="true"
++            android:label="@string/task_widget_name">
+             <intent-filter>
+                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+             </intent-filter>
+@@ -30,6 +31,17 @@
+                 android:name="android.appwidget.provider"
+                 android:resource="@xml/task_widget_info" />
+         </receiver>
++        <receiver
++            android:name=".widget.CalendarWeekWidgetReceiver"
++            android:exported="true"
++            android:label="@string/calendar_widget_name">
++            <intent-filter>
++                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
++            </intent-filter>
++            <meta-data
++                android:name="android.appwidget.provider"
++                android:resource="@xml/calendar_week_widget_info" />
++        </receiver>
+         <receiver
+             android:name=".widget.TaskWidgetDateChangeReceiver"
+             android:exported="false">
+@@ -43,6 +55,10 @@
+             android:name=".widget.TaskWidgetConfigureActivity"
+             android:exported="true"
+             android:theme="@style/Theme.Pix" />
++        <activity
++            android:name=".widget.CalendarWidgetConfigureActivity"
++            android:exported="true"
++            android:theme="@style/Theme.Pix" />
+         <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
+         <receiver android:name=".reminders.ReminderRescheduleReceiver" android:exported="false">
+             <intent-filter>
+diff --git a/app/src/main/java/com/example/pix/MainActivity.kt b/app/src/main/java/com/example/pix/MainActivity.kt
+index 13a6c70..1f6675d 100644
+--- a/app/src/main/java/com/example/pix/MainActivity.kt
++++ b/app/src/main/java/com/example/pix/MainActivity.kt
+@@ -92,7 +92,12 @@ class MainActivity : ComponentActivity() {
+ 
+     private fun handleWidgetIntent(intent: Intent?, model: TasksViewModel) {
+         when (intent?.action) {
+-            ACTION_NEW_TASK -> model.openNew(TaskEntity(title = ""), emptySet())
++            ACTION_NEW_TASK -> {
++                val initialDay =
++                    intent.takeIf { it.hasExtra(EXTRA_INITIAL_DAY) }
++                        ?.getLongExtra(EXTRA_INITIAL_DAY, 0L)
++                model.openNew(TaskEntity(title = "", dueDay = initialDay), emptySet())
++            }
+             ACTION_OPEN_TASK -> intent.getStringExtra(EXTRA_TASK_ID)?.let(model::openTask)
+             else -> intent?.getStringExtra(EXTRA_TASK_ID)?.let(model::openTask)
+         }
+@@ -102,6 +107,7 @@ class MainActivity : ComponentActivity() {
+         const val ACTION_NEW_TASK = "com.example.pix.action.NEW_TASK"
+         const val ACTION_OPEN_TASK = "com.example.pix.action.OPEN_TASK"
+         const val EXTRA_TASK_ID = "taskId"
++        const val EXTRA_INITIAL_DAY = "initialDay"
+     }
+ 
+     private fun handleAuthIntent(intent: Intent?) {
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWeekWidget.kt b/app/src/main/java/com/example/pix/widget/CalendarWeekWidget.kt
+new file mode 100644
+index 0000000..c6aefbf
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWeekWidget.kt
+@@ -0,0 +1,423 @@
++package com.example.pix.widget
++
++import android.appwidget.AppWidgetManager
++import android.content.Context
++import android.content.Intent
++import android.net.Uri
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.unit.DpSize
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import androidx.glance.ColorFilter
++import androidx.glance.GlanceId
++import androidx.glance.GlanceModifier
++import androidx.glance.Image
++import androidx.glance.ImageProvider
++import androidx.glance.LocalSize
++import androidx.glance.action.actionParametersOf
++import androidx.glance.action.clickable
++import androidx.glance.appwidget.GlanceAppWidget
++import androidx.glance.appwidget.GlanceAppWidgetManager
++import androidx.glance.appwidget.SizeMode
++import androidx.glance.appwidget.action.actionRunCallback
++import androidx.glance.appwidget.action.actionStartActivity
++import androidx.glance.appwidget.appWidgetBackground
++import androidx.glance.appwidget.background
++import androidx.glance.appwidget.cornerRadius
++import androidx.glance.appwidget.lazy.LazyColumn
++import androidx.glance.appwidget.lazy.items
++import androidx.glance.appwidget.provideContent
++import androidx.glance.layout.Alignment
++import androidx.glance.layout.Box
++import androidx.glance.layout.Column
++import androidx.glance.layout.Row
++import androidx.glance.layout.Spacer
++import androidx.glance.layout.fillMaxHeight
++import androidx.glance.layout.fillMaxSize
++import androidx.glance.layout.fillMaxWidth
++import androidx.glance.layout.height
++import androidx.glance.layout.padding
++import androidx.glance.layout.size
++import androidx.glance.layout.width
++import androidx.glance.semantics.contentDescription
++import androidx.glance.semantics.semantics
++import androidx.glance.text.FontWeight
++import androidx.glance.text.Text
++import androidx.glance.text.TextStyle
++import com.example.pix.R
++
++class CalendarWeekWidget : GlanceAppWidget() {
++    override val sizeMode: SizeMode =
++        SizeMode.Responsive(
++            setOf(
++                DpSize(180.dp, 150.dp),
++                DpSize(280.dp, 220.dp),
++                DpSize(360.dp, 360.dp),
++            )
++        )
++
++    override suspend fun provideGlance(context: Context, id: GlanceId) {
++        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
++        val content = runCatching { CalendarWidgetDataSource(context).load(appWidgetId) }.getOrNull()
++        provideContent {
++            CalendarWidgetSurface(
++                context = context,
++                appWidgetId = appWidgetId,
++                content = content,
++                palette = WidgetPalette.forContext(context),
++            )
++        }
++    }
++}
++
++@Composable
++private fun CalendarWidgetSurface(
++    context: Context,
++    appWidgetId: Int,
++    content: CalendarWidgetContent?,
++    palette: WidgetPalette,
++) {
++    val size = LocalSize.current
++    val compact = size.width < 250.dp || size.height < 180.dp
++    val large = size.width >= 340.dp && size.height >= 300.dp
++
++    Column(
++        modifier =
++            GlanceModifier.fillMaxSize()
++                .background(palette.surface, palette.surface)
++                .cornerRadius(R.dimen.widget_corner_radius)
++                .appWidgetBackground()
++                .padding(
++                    horizontal = if (compact) 7.dp else 11.dp,
++                    vertical = if (compact) 5.dp else 7.dp,
++                ),
++    ) {
++        CalendarHeader(
++            context = context,
++            appWidgetId = appWidgetId,
++            content = content,
++            palette = palette,
++            compact = compact,
++        )
++
++        if (content == null) {
++            CalendarEmptyState(context.getString(R.string.widget_unavailable), palette)
++            return@Column
++        }
++
++        WeekStrip(context, content, palette, compact)
++        Spacer(GlanceModifier.height(if (compact) 2.dp else 4.dp))
++        Box(
++            modifier =
++                GlanceModifier.fillMaxWidth().height(1.dp).background(palette.divider, palette.divider)
++        ) {}
++        Spacer(GlanceModifier.height(if (compact) 2.dp else 5.dp))
++
++        if (content.tasks.isEmpty()) {
++            CalendarEmptyState(context.getString(R.string.calendar_widget_empty), palette)
++        } else {
++            LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
++                items(content.tasks) { task ->
++                    CalendarTaskRow(
++                        context = context,
++                        task = task,
++                        palette = palette,
++                        compact = compact,
++                        large = large,
++                    )
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun CalendarHeader(
++    context: Context,
++    appWidgetId: Int,
++    content: CalendarWidgetContent?,
++    palette: WidgetPalette,
++    compact: Boolean,
++) {
++    val selectedDay = content?.config?.selectedEpochDay
++    Row(
++        modifier = GlanceModifier.fillMaxWidth().height(if (compact) 34.dp else 38.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        CalendarIconButton(
++            drawable = R.drawable.ic_widget_calendar,
++            description = context.getString(R.string.go_today),
++            palette = palette,
++            size = if (compact) 28.dp else 32.dp,
++            iconSize = if (compact) 18.dp else 20.dp,
++            action = actionRunCallback<CalendarTodayAction>(),
++        )
++        CalendarIconButton(
++            drawable = R.drawable.ic_widget_chevron_left,
++            description = context.getString(R.string.previous_week),
++            palette = palette,
++            size = if (compact) 27.dp else 31.dp,
++            iconSize = 18.dp,
++            action =
++                actionRunCallback<MoveCalendarWeekAction>(
++                    actionParametersOf(CalendarWeekDeltaKey to -1)
++                ),
++        )
++        Text(
++            text = content?.monthLabel.orEmpty(),
++            modifier = GlanceModifier.defaultWeight().padding(horizontal = 2.dp),
++            maxLines = 1,
++            style =
++                TextStyle(
++                    color = fixedColorProvider(palette.primaryText),
++                    fontSize = ((if (compact) 14f else 17f) * palette.textScale).sp,
++                    fontWeight = FontWeight.Bold,
++                ),
++        )
++        CalendarIconButton(
++            drawable = R.drawable.ic_widget_chevron_right,
++            description = context.getString(R.string.next_week),
++            palette = palette,
++            size = if (compact) 27.dp else 31.dp,
++            iconSize = 18.dp,
++            action =
++                actionRunCallback<MoveCalendarWeekAction>(
++                    actionParametersOf(CalendarWeekDeltaKey to 1)
++                ),
++        )
++        CalendarIconButton(
++            drawable = R.drawable.ic_widget_add,
++            description = context.getString(R.string.widget_add_task),
++            palette = palette,
++            size = if (compact) 28.dp else 32.dp,
++            iconSize = if (compact) 18.dp else 20.dp,
++            action = newTaskAction(context, selectedDay),
++        )
++        if (!compact) {
++            CalendarIconButton(
++                drawable = R.drawable.ic_widget_more,
++                description = context.getString(R.string.widget_more_options),
++                palette = palette,
++                size = 32.dp,
++                iconSize = 18.dp,
++                action = calendarConfigAction(context, appWidgetId),
++            )
++        }
++    }
++}
++
++@Composable
++private fun CalendarIconButton(
++    drawable: Int,
++    description: String,
++    palette: WidgetPalette,
++    size: androidx.compose.ui.unit.Dp,
++    iconSize: androidx.compose.ui.unit.Dp,
++    action: androidx.glance.action.Action,
++) {
++    Box(
++        modifier = GlanceModifier.size(size).clickable(action),
++        contentAlignment = Alignment.Center,
++    ) {
++        Image(
++            provider = ImageProvider(drawable),
++            contentDescription = description,
++            modifier = GlanceModifier.size(iconSize),
++            colorFilter = ColorFilter.tint(fixedColorProvider(palette.primaryText)),
++        )
++    }
++}
++
++@Composable
++private fun WeekStrip(
++    context: Context,
++    content: CalendarWidgetContent,
++    palette: WidgetPalette,
++    compact: Boolean,
++) {
++    Row(
++        modifier = GlanceModifier.fillMaxWidth().height(if (compact) 48.dp else 56.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        content.days.forEach { day ->
++            Column(
++                modifier =
++                    GlanceModifier.defaultWeight()
++                        .fillMaxHeight()
++                        .semantics {
++                            contentDescription =
++                                context.getString(
++                                    R.string.calendar_widget_select_day,
++                                    day.weekdayLabel,
++                                    day.dayNumber,
++                                )
++                        }
++                        .clickable(
++                            actionRunCallback<SelectCalendarDayAction>(
++                                actionParametersOf(CalendarDayKey to day.epochDay)
++                            )
++                        ),
++                horizontalAlignment = Alignment.CenterHorizontally,
++                verticalAlignment = Alignment.CenterVertically,
++            ) {
++                Text(
++                    text = day.weekdayLabel,
++                    maxLines = 1,
++                    style =
++                        TextStyle(
++                            color = fixedColorProvider(palette.secondaryText),
++                            fontSize = ((if (compact) 8.5f else 10f) * palette.textScale).sp,
++                            fontWeight = if (day.today) FontWeight.Bold else FontWeight.Normal,
++                        ),
++                )
++                Spacer(GlanceModifier.height(2.dp))
++                Box(
++                    modifier =
++                        if (day.selected) {
++                            GlanceModifier.size(if (compact) 22.dp else 32.dp)
++                                .background(palette.accent, palette.accent)
++                                .cornerRadius(if (compact) 11.dp else 16.dp)
++                        } else {
++                            GlanceModifier.size(if (compact) 22.dp else 32.dp)
++                        },
++                    contentAlignment = Alignment.Center,
++                ) {
++                    Text(
++                        text = day.dayNumber.toString(),
++                        maxLines = 1,
++                        style =
++                            TextStyle(
++                                color =
++                                    fixedColorProvider(
++                                        when {
++                                            day.selected -> palette.onAccent
++                                            day.today -> palette.accent
++                                            else -> palette.primaryText
++                                        }
++                                    ),
++                                fontSize = ((if (compact) 13f else 15f) * palette.textScale).sp,
++                                fontWeight =
++                                    if (day.selected || day.today) FontWeight.Bold else FontWeight.Normal,
++                            ),
++                    )
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun CalendarTaskRow(
++    context: Context,
++    task: CalendarWidgetTask,
++    palette: WidgetPalette,
++    compact: Boolean,
++    large: Boolean,
++) {
++    val rowHeight = if (compact) 26.dp else if (large) 30.dp else 28.dp
++    Row(
++        modifier = GlanceModifier.fillMaxWidth().height(rowHeight),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        Box(
++            modifier =
++                GlanceModifier.width(3.dp)
++                    .fillMaxHeight()
++                    .background(Color(task.listColorArgb), Color(task.listColorArgb))
++        ) {}
++        Spacer(GlanceModifier.width(4.dp))
++        Box(
++            modifier =
++                GlanceModifier.width(if (compact) 28.dp else 31.dp)
++                    .height(rowHeight)
++                    .clickable(
++                        actionRunCallback<CompleteTaskAction>(
++                            actionParametersOf(
++                                TaskIdKey to task.id,
++                                TaskCompletedKey to !task.isCompleted,
++                            )
++                        )
++                    ),
++            contentAlignment = Alignment.Center,
++        ) {
++            Image(
++                provider =
++                    ImageProvider(
++                        if (task.isCompleted) R.drawable.ic_widget_checked
++                        else R.drawable.ic_widget_checkbox
++                    ),
++                contentDescription =
++                    context.getString(
++                        if (task.isCompleted) R.string.widget_reopen_task else R.string.widget_complete_task,
++                        task.title,
++                    ),
++                modifier = GlanceModifier.size(if (compact) 16.dp else 18.dp),
++                colorFilter =
++                    ColorFilter.tint(
++                        fixedColorProvider(
++                            if (task.isCompleted) palette.secondaryText
++                            else Color(TaskWidgetDataSource.priorityColor(task.priority))
++                        )
++                    ),
++            )
++        }
++        Spacer(GlanceModifier.width(2.dp))
++        Row(
++            modifier =
++                GlanceModifier.defaultWeight()
++                    .fillMaxHeight()
++                    .clickable(taskAction(context, task.id)),
++            verticalAlignment = Alignment.CenterVertically,
++        ) {
++            Text(
++                text = task.title,
++                modifier = GlanceModifier.defaultWeight(),
++                maxLines = 1,
++                style =
++                    TextStyle(
++                        color =
++                            fixedColorProvider(
++                                if (task.isCompleted) palette.secondaryText else palette.primaryText
++                            ),
++                        fontSize = ((if (compact) 11.5f else 13f) * palette.textScale).sp,
++                        fontWeight = FontWeight.Medium,
++                    ),
++            )
++            if (!compact && task.timeLabel.isNotBlank()) {
++                Spacer(GlanceModifier.width(5.dp))
++                Text(
++                    text = task.timeLabel,
++                    maxLines = 1,
++                    style =
++                        TextStyle(
++                            color = fixedColorProvider(palette.secondaryText),
++                            fontSize = (10.5f * palette.textScale).sp,
++                        ),
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun CalendarEmptyState(text: String, palette: WidgetPalette) {
++    Box(modifier = GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
++        Text(
++            text = text,
++            maxLines = 2,
++            style =
++                TextStyle(
++                    color = fixedColorProvider(palette.secondaryText),
++                    fontSize = (13f * palette.textScale).sp,
++                ),
++        )
++    }
++}
++
++private fun calendarConfigAction(context: Context, appWidgetId: Int) =
++    actionStartActivity(
++        Intent(context, CalendarWidgetConfigureActivity::class.java)
++            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
++            .setData(Uri.parse("pix://widget/calendar/config/$appWidgetId"))
++    )
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWeekWidgetReceiver.kt b/app/src/main/java/com/example/pix/widget/CalendarWeekWidgetReceiver.kt
+new file mode 100644
+index 0000000..6ebd4ea
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWeekWidgetReceiver.kt
+@@ -0,0 +1,15 @@
++package com.example.pix.widget
++
++import android.content.Context
++import androidx.glance.appwidget.GlanceAppWidget
++import androidx.glance.appwidget.GlanceAppWidgetReceiver
++
++class CalendarWeekWidgetReceiver : GlanceAppWidgetReceiver() {
++    override val glanceAppWidget: GlanceAppWidget = CalendarWeekWidget()
++
++    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
++        super.onDeleted(context, appWidgetIds)
++        val store = CalendarWidgetConfigStore(context)
++        appWidgetIds.forEach(store::delete)
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWidgetActions.kt b/app/src/main/java/com/example/pix/widget/CalendarWidgetActions.kt
+new file mode 100644
+index 0000000..54b83bf
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWidgetActions.kt
+@@ -0,0 +1,59 @@
++package com.example.pix.widget
++
++import android.content.Context
++import androidx.glance.GlanceId
++import androidx.glance.action.ActionParameters
++import androidx.glance.appwidget.GlanceAppWidgetManager
++import androidx.glance.appwidget.action.ActionCallback
++import java.time.LocalDate
++
++val CalendarDayKey = ActionParameters.Key<Long>("calendar_day")
++val CalendarWeekDeltaKey = ActionParameters.Key<Int>("calendar_week_delta")
++
++class SelectCalendarDayAction : ActionCallback {
++    override suspend fun onAction(
++        context: Context,
++        glanceId: GlanceId,
++        parameters: ActionParameters,
++    ) {
++        val day = parameters[CalendarDayKey] ?: return
++        updateConfig(context, glanceId) { it.copy(selectedEpochDay = day) }
++    }
++}
++
++class MoveCalendarWeekAction : ActionCallback {
++    override suspend fun onAction(
++        context: Context,
++        glanceId: GlanceId,
++        parameters: ActionParameters,
++    ) {
++        val delta = parameters[CalendarWeekDeltaKey] ?: return
++        updateConfig(context, glanceId) { config ->
++            config.copy(
++                selectedEpochDay =
++                    LocalDate.ofEpochDay(config.selectedEpochDay).plusWeeks(delta.toLong()).toEpochDay()
++            )
++        }
++    }
++}
++
++class CalendarTodayAction : ActionCallback {
++    override suspend fun onAction(
++        context: Context,
++        glanceId: GlanceId,
++        parameters: ActionParameters,
++    ) {
++        updateConfig(context, glanceId) { it.copy(selectedEpochDay = LocalDate.now().toEpochDay()) }
++    }
++}
++
++private suspend fun updateConfig(
++    context: Context,
++    glanceId: GlanceId,
++    transform: (CalendarWidgetConfig) -> CalendarWidgetConfig,
++) {
++    val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
++    val store = CalendarWidgetConfigStore(context)
++    store.write(appWidgetId, transform(store.read(appWidgetId)))
++    CalendarWeekWidget().update(context, glanceId)
++}
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWidgetConfig.kt b/app/src/main/java/com/example/pix/widget/CalendarWidgetConfig.kt
+new file mode 100644
+index 0000000..2cdc8c9
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWidgetConfig.kt
+@@ -0,0 +1,19 @@
++package com.example.pix.widget
++
++import java.time.LocalDate
++
++enum class CalendarWidgetFilterType {
++    ALL,
++    TAG,
++    INBOX,
++    LISTS,
++}
++
++data class CalendarWidgetConfig(
++    val filterType: CalendarWidgetFilterType = CalendarWidgetFilterType.ALL,
++    val selectedTagIds: Set<String> = emptySet(),
++    val allTags: Boolean = true,
++    val selectedListIds: Set<String> = emptySet(),
++    val allLists: Boolean = true,
++    val selectedEpochDay: Long = LocalDate.now().toEpochDay(),
++)
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWidgetConfigStore.kt b/app/src/main/java/com/example/pix/widget/CalendarWidgetConfigStore.kt
+new file mode 100644
+index 0000000..4e74a80
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWidgetConfigStore.kt
+@@ -0,0 +1,64 @@
++package com.example.pix.widget
++
++import android.content.Context
++import java.time.LocalDate
++
++class CalendarWidgetConfigStore(context: Context) {
++    private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
++
++    fun read(appWidgetId: Int): CalendarWidgetConfig {
++        val prefix = keyPrefix(appWidgetId)
++        val filter =
++            runCatching {
++                    CalendarWidgetFilterType.valueOf(
++                        prefs.getString(prefix + FILTER, CalendarWidgetFilterType.ALL.name)
++                            ?: CalendarWidgetFilterType.ALL.name
++                    )
++                }
++                .getOrDefault(CalendarWidgetFilterType.ALL)
++        return CalendarWidgetConfig(
++            filterType = filter,
++            selectedTagIds = prefs.getStringSet(prefix + TAGS, emptySet()).orEmpty().toSet(),
++            allTags = prefs.getBoolean(prefix + ALL_TAGS, true),
++            selectedListIds = prefs.getStringSet(prefix + LISTS, emptySet()).orEmpty().toSet(),
++            allLists = prefs.getBoolean(prefix + ALL_LISTS, true),
++            selectedEpochDay = prefs.getLong(prefix + DAY, LocalDate.now().toEpochDay()),
++        )
++    }
++
++    fun write(appWidgetId: Int, config: CalendarWidgetConfig) {
++        val prefix = keyPrefix(appWidgetId)
++        prefs.edit()
++            .putString(prefix + FILTER, config.filterType.name)
++            .putStringSet(prefix + TAGS, config.selectedTagIds)
++            .putBoolean(prefix + ALL_TAGS, config.allTags)
++            .putStringSet(prefix + LISTS, config.selectedListIds)
++            .putBoolean(prefix + ALL_LISTS, config.allLists)
++            .putLong(prefix + DAY, config.selectedEpochDay)
++            .apply()
++    }
++
++    fun delete(appWidgetId: Int) {
++        val prefix = keyPrefix(appWidgetId)
++        prefs.edit()
++            .remove(prefix + FILTER)
++            .remove(prefix + TAGS)
++            .remove(prefix + ALL_TAGS)
++            .remove(prefix + LISTS)
++            .remove(prefix + ALL_LISTS)
++            .remove(prefix + DAY)
++            .apply()
++    }
++
++    private fun keyPrefix(id: Int) = "calendar_widget_${id}_"
++
++    private companion object {
++        const val PREFS = "calendar_week_widget_config"
++        const val FILTER = "filter"
++        const val TAGS = "tags"
++        const val ALL_TAGS = "all_tags"
++        const val LISTS = "lists"
++        const val ALL_LISTS = "all_lists"
++        const val DAY = "selected_epoch_day"
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWidgetConfigureActivity.kt b/app/src/main/java/com/example/pix/widget/CalendarWidgetConfigureActivity.kt
+new file mode 100644
+index 0000000..ff027d3
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWidgetConfigureActivity.kt
+@@ -0,0 +1,264 @@
++package com.example.pix.widget
++
++import android.app.Activity
++import android.appwidget.AppWidgetManager
++import android.content.Intent
++import android.os.Bundle
++import androidx.activity.ComponentActivity
++import androidx.activity.compose.setContent
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.Button
++import androidx.compose.material3.Checkbox
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.RadioButton
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Surface
++import androidx.compose.material3.Text
++import androidx.compose.material3.TopAppBar
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.unit.dp
++import androidx.glance.appwidget.GlanceAppWidgetManager
++import androidx.lifecycle.lifecycleScope
++import com.example.pix.PixApplication
++import com.example.pix.R
++import com.example.pix.data.INBOX_ID
++import com.example.pix.data.ListWithCount
++import com.example.pix.data.TagWithCount
++import com.example.pix.ui.theme.PixTheme
++import kotlinx.coroutines.launch
++
++class CalendarWidgetConfigureActivity : ComponentActivity() {
++    private var appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        appWidgetId =
++            intent?.getIntExtra(
++                AppWidgetManager.EXTRA_APPWIDGET_ID,
++                AppWidgetManager.INVALID_APPWIDGET_ID,
++            ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
++        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
++            finish()
++            return
++        }
++
++        setResult(
++            Activity.RESULT_CANCELED,
++            Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
++        )
++
++        val store = CalendarWidgetConfigStore(this)
++        val initial = store.read(appWidgetId)
++        setContent {
++            val app = application as PixApplication
++            val lists by app.repository.lists.collectAsState(initial = emptyList())
++            val tags by app.repository.tags.collectAsState(initial = emptyList())
++            val themePrefs = remember { getSharedPreferences("appearance", 0) }
++            PixTheme(
++                mode = themePrefs.getInt("theme", 0),
++                accent = themePrefs.getInt("accent", TaskWidgetDataSource.NEUTRAL),
++                textSize = themePrefs.getInt("textSize", 1),
++                fontStyle = themePrefs.getInt("fontStyle", 0),
++            ) {
++                CalendarConfigureContent(initial, lists, tags) { config ->
++                    lifecycleScope.launch {
++                        store.write(appWidgetId, config)
++                        val glanceId =
++                            GlanceAppWidgetManager(this@CalendarWidgetConfigureActivity)
++                                .getGlanceIdBy(appWidgetId)
++                        CalendarWeekWidget().update(this@CalendarWidgetConfigureActivity, glanceId)
++                        setResult(
++                            Activity.RESULT_OK,
++                            Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
++                        )
++                        finish()
++                    }
++                }
++            }
++        }
++    }
++}
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++private fun CalendarConfigureContent(
++    initial: CalendarWidgetConfig,
++    lists: List<ListWithCount>,
++    tags: List<TagWithCount>,
++    onSave: (CalendarWidgetConfig) -> Unit,
++) {
++    var filter by remember { mutableStateOf(initial.filterType) }
++    var tagIds by remember { mutableStateOf(initial.selectedTagIds) }
++    var allTags by remember { mutableStateOf(initial.allTags) }
++    var listIds by remember { mutableStateOf(initial.selectedListIds) }
++    var allLists by remember { mutableStateOf(initial.allLists) }
++
++    val canSave =
++        when (filter) {
++            CalendarWidgetFilterType.TAG -> allTags || tagIds.isNotEmpty()
++            CalendarWidgetFilterType.LISTS -> allLists || listIds.isNotEmpty()
++            else -> true
++        }
++
++    Scaffold(
++        topBar = { TopAppBar(title = { Text(stringResource(R.string.calendar_widget_settings)) }) },
++        bottomBar = {
++            Surface(tonalElevation = 3.dp) {
++                Button(
++                    onClick = {
++                        onSave(
++                            initial.copy(
++                                filterType = filter,
++                                selectedTagIds = if (allTags) emptySet() else tagIds,
++                                allTags = allTags,
++                                selectedListIds = if (allLists) emptySet() else listIds,
++                                allLists = allLists,
++                            )
++                        )
++                    },
++                    enabled = canSave,
++                    modifier = Modifier.fillMaxWidth().padding(16.dp),
++                ) {
++                    Text(stringResource(R.string.done))
++                }
++            }
++        },
++    ) { padding ->
++        LazyColumn(
++            modifier = Modifier.fillMaxSize().padding(padding),
++            contentPadding = PaddingValues(bottom = 20.dp),
++        ) {
++            item { CalendarSectionLabel(R.string.widget_filter_title) }
++            item {
++                CalendarRadioChoice(R.string.all, filter == CalendarWidgetFilterType.ALL) {
++                    filter = CalendarWidgetFilterType.ALL
++                }
++            }
++            item {
++                CalendarRadioChoice(R.string.widget_filter_tag, filter == CalendarWidgetFilterType.TAG) {
++                    filter = CalendarWidgetFilterType.TAG
++                    if (!allTags && tagIds.isEmpty()) allTags = true
++                }
++            }
++            if (filter == CalendarWidgetFilterType.TAG) {
++                item {
++                    CalendarCheckChoice(
++                        label = stringResource(R.string.calendar_widget_all_tags),
++                        checked = allTags,
++                        enabled = true,
++                    ) {
++                        allTags = it
++                        if (it) tagIds = emptySet()
++                    }
++                }
++                items(tags, key = { it.tag.id }) { row ->
++                    CalendarCheckChoice(
++                        label = "#${row.tag.name}",
++                        checked = row.tag.id in tagIds,
++                        enabled = !allTags,
++                    ) { checked ->
++                        tagIds = if (checked) tagIds + row.tag.id else tagIds - row.tag.id
++                    }
++                }
++            }
++            item {
++                CalendarRadioChoice(R.string.inbox, filter == CalendarWidgetFilterType.INBOX) {
++                    filter = CalendarWidgetFilterType.INBOX
++                }
++            }
++            item {
++                CalendarRadioChoice(R.string.calendar_widget_lists, filter == CalendarWidgetFilterType.LISTS) {
++                    filter = CalendarWidgetFilterType.LISTS
++                    if (!allLists && listIds.isEmpty()) allLists = true
++                }
++            }
++            if (filter == CalendarWidgetFilterType.LISTS) {
++                item {
++                    CalendarCheckChoice(
++                        label = stringResource(R.string.calendar_widget_all_lists),
++                        checked = allLists,
++                        enabled = true,
++                    ) {
++                        allLists = it
++                        if (it) listIds = emptySet()
++                    }
++                }
++                items(lists.filter { it.list.id != INBOX_ID }, key = { it.list.id }) { row ->
++                    CalendarCheckChoice(
++                        label = "${row.list.icon} ${row.list.name}",
++                        checked = row.list.id in listIds,
++                        enabled = !allLists,
++                    ) { checked ->
++                        listIds = if (checked) listIds + row.list.id else listIds - row.list.id
++                    }
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun CalendarSectionLabel(label: Int) {
++    Text(
++        text = stringResource(label),
++        style = MaterialTheme.typography.titleMedium,
++        color = MaterialTheme.colorScheme.primary,
++        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
++    )
++}
++
++@Composable
++private fun CalendarRadioChoice(label: Int, selected: Boolean, onClick: () -> Unit) {
++    Row(
++        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        RadioButton(selected = selected, onClick = onClick)
++        Spacer(Modifier.width(12.dp))
++        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
++    }
++}
++
++@Composable
++private fun CalendarCheckChoice(
++    label: String,
++    checked: Boolean,
++    enabled: Boolean,
++    onCheckedChange: (Boolean) -> Unit,
++) {
++    Row(
++        modifier =
++            Modifier.fillMaxWidth()
++                .clickable(enabled = enabled) { onCheckedChange(!checked) }
++                .padding(horizontal = 20.dp, vertical = 9.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        Checkbox(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
++        Spacer(Modifier.width(12.dp))
++        Text(
++            label,
++            style = MaterialTheme.typography.bodyLarge,
++            color =
++                if (enabled) MaterialTheme.colorScheme.onSurface
++                else MaterialTheme.colorScheme.onSurface.copy(alpha = .45f),
++        )
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWidgetDataSource.kt b/app/src/main/java/com/example/pix/widget/CalendarWidgetDataSource.kt
+new file mode 100644
+index 0000000..7edcd4e
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWidgetDataSource.kt
+@@ -0,0 +1,118 @@
++package com.example.pix.widget
++
++import android.content.Context
++import com.example.pix.PixApplication
++import com.example.pix.data.INBOX_ID
++import com.example.pix.data.ListEntity
++import com.example.pix.data.TagEntity
++import com.example.pix.data.TaskWithDetails
++import com.example.pix.domain.CalendarRules
++import java.time.LocalDate
++import java.time.LocalTime
++import java.time.format.DateTimeFormatter
++import java.time.format.TextStyle
++import java.util.Locale
++import kotlinx.coroutines.flow.first
++
++class CalendarWidgetDataSource(private val context: Context) {
++    private val app = context.applicationContext as PixApplication
++    private val repository = app.repository
++
++    suspend fun load(appWidgetId: Int): CalendarWidgetContent {
++        val store = CalendarWidgetConfigStore(context)
++        val stored = store.read(appWidgetId)
++        val lists = repository.lists.first().map { it.list }
++        val tags = repository.tags.first().map { it.tag }
++        val config = validate(stored, lists, tags)
++        if (config != stored) store.write(appWidgetId, config)
++
++        val selectedDate = LocalDate.ofEpochDay(config.selectedEpochDay)
++        val today = LocalDate.now()
++        val locale = currentLocale()
++        val week = CalendarRules.week(selectedDate)
++        val rows = repository.day(config.selectedEpochDay).first()
++        val filtered = filter(rows, config)
++
++        return CalendarWidgetContent(
++            config = config,
++            monthLabel = monthLabel(week.first(), week.last(), locale),
++            days =
++                week.map { day ->
++                    CalendarWidgetDay(
++                        epochDay = day.toEpochDay(),
++                        weekdayLabel =
++                            day.dayOfWeek.getDisplayName(TextStyle.SHORT, locale).capitalized(locale),
++                        dayNumber = day.dayOfMonth,
++                        selected = day == selectedDate,
++                        today = day == today,
++                    )
++                },
++            tasks = filtered.map { it.toWidgetTask(config.selectedEpochDay, locale) },
++        )
++    }
++
++    private fun validate(
++        config: CalendarWidgetConfig,
++        lists: List<ListEntity>,
++        tags: List<TagEntity>,
++    ): CalendarWidgetConfig {
++        val validTagIds = tags.mapTo(mutableSetOf()) { it.id }
++        val validListIds = lists.mapTo(mutableSetOf()) { it.id }
++        val tagIds = config.selectedTagIds.intersect(validTagIds)
++        val listIds = config.selectedListIds.intersect(validListIds).filterTo(mutableSetOf()) { it != INBOX_ID }
++        var result = config.copy(selectedTagIds = tagIds, selectedListIds = listIds)
++        if (result.filterType == CalendarWidgetFilterType.TAG && !result.allTags && result.selectedTagIds.isEmpty()) {
++            result = result.copy(filterType = CalendarWidgetFilterType.ALL)
++        }
++        if (result.filterType == CalendarWidgetFilterType.LISTS && !result.allLists && result.selectedListIds.isEmpty()) {
++            result = result.copy(filterType = CalendarWidgetFilterType.ALL)
++        }
++        return result
++    }
++
++    private fun filter(
++        rows: List<TaskWithDetails>,
++        config: CalendarWidgetConfig,
++    ): List<TaskWithDetails> =
++        when (config.filterType) {
++            CalendarWidgetFilterType.ALL -> rows
++            CalendarWidgetFilterType.INBOX -> rows.filter { it.list.id == INBOX_ID }
++            CalendarWidgetFilterType.TAG ->
++                if (config.allTags) rows.filter { it.tags.isNotEmpty() }
++                else rows.filter { detail -> detail.tags.any { it.id in config.selectedTagIds } }
++            CalendarWidgetFilterType.LISTS ->
++                if (config.allLists) rows
++                else rows.filter { it.list.id in config.selectedListIds }
++        }
++
++    private fun TaskWithDetails.toWidgetTask(selectedDay: Long, locale: Locale): CalendarWidgetTask =
++        CalendarWidgetTask(
++            id = task.id,
++            title = task.title,
++            timeLabel =
++                if (task.dueDay == selectedDay && task.minuteOfDay != null) {
++                    LocalTime.of(task.minuteOfDay / 60, task.minuteOfDay % 60)
++                        .format(DateTimeFormatter.ofPattern("HH:mm", locale))
++                } else {
++                    ""
++                },
++            priority = task.priority,
++            listColorArgb = TaskWidgetDataSource.palette(list.color),
++            isCompleted = task.isCompleted,
++        )
++
++    private fun monthLabel(first: LocalDate, last: LocalDate, locale: Locale): String {
++        val formatter = DateTimeFormatter.ofPattern("LLLL", locale)
++        val firstMonth = first.format(formatter).capitalized(locale)
++        val lastMonth = last.format(formatter).capitalized(locale)
++        return if (first.year == last.year && first.month == last.month) firstMonth
++        else if (firstMonth == lastMonth) firstMonth
++        else "$firstMonth · $lastMonth"
++    }
++
++    private fun currentLocale(): Locale =
++        context.resources.configuration.locales.get(0) ?: Locale.getDefault()
++
++    private fun String.capitalized(locale: Locale): String =
++        replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
++}
+diff --git a/app/src/main/java/com/example/pix/widget/CalendarWidgetModels.kt b/app/src/main/java/com/example/pix/widget/CalendarWidgetModels.kt
+new file mode 100644
+index 0000000..fa1f9d4
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/CalendarWidgetModels.kt
+@@ -0,0 +1,25 @@
++package com.example.pix.widget
++
++data class CalendarWidgetDay(
++    val epochDay: Long,
++    val weekdayLabel: String,
++    val dayNumber: Int,
++    val selected: Boolean,
++    val today: Boolean,
++)
++
++data class CalendarWidgetTask(
++    val id: String,
++    val title: String,
++    val timeLabel: String,
++    val priority: Int,
++    val listColorArgb: Int,
++    val isCompleted: Boolean,
++)
++
++data class CalendarWidgetContent(
++    val config: CalendarWidgetConfig,
++    val monthLabel: String,
++    val days: List<CalendarWidgetDay>,
++    val tasks: List<CalendarWidgetTask>,
++)
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidget.kt b/app/src/main/java/com/example/pix/widget/TaskWidget.kt
+index 909a8ae..901858f 100644
+--- a/app/src/main/java/com/example/pix/widget/TaskWidget.kt
++++ b/app/src/main/java/com/example/pix/widget/TaskWidget.kt
+@@ -1,9 +1,6 @@
+ package com.example.pix.widget
+ 
+-import android.appwidget.AppWidgetManager
+ import android.content.Context
+-import android.content.Intent
+-import android.net.Uri
+ import androidx.compose.runtime.Composable
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.unit.DpSize
+@@ -21,7 +18,6 @@ import androidx.glance.appwidget.GlanceAppWidget
+ import androidx.glance.appwidget.GlanceAppWidgetManager
+ import androidx.glance.appwidget.SizeMode
+ import androidx.glance.appwidget.action.actionRunCallback
+-import androidx.glance.appwidget.action.actionStartActivity
+ import androidx.glance.appwidget.appWidgetBackground
+ import androidx.glance.appwidget.background
+ import androidx.glance.appwidget.cornerRadius
+@@ -43,8 +39,6 @@ import androidx.glance.layout.width
+ import androidx.glance.text.FontWeight
+ import androidx.glance.text.Text
+ import androidx.glance.text.TextStyle
+-import androidx.glance.unit.ColorProvider
+-import com.example.pix.MainActivity
+ import com.example.pix.R
+ import androidx.glance.color.ColorProvider
+ 
+@@ -84,64 +78,6 @@ class TaskWidget : GlanceAppWidget() {
+     }
+ }
+ 
+-private data class WidgetPalette(
+-    val surface: Color,
+-    val primaryText: Color,
+-    val secondaryText: Color,
+-    val error: Color,
+-    val textScale: Float,
+-) {
+-
+-    companion object {
+-
+-        fun forContext(context: Context): WidgetPalette {
+-            val prefs =
+-                context.getSharedPreferences(
+-                    "appearance",
+-                    Context.MODE_PRIVATE,
+-                )
+-
+-            val mode = prefs.getInt("theme", 0)
+-
+-            val textScale =
+-                listOf(
+-                    .88f,
+-                    1f,
+-                    1.15f,
+-                )[prefs.getInt("textSize", 1).coerceIn(0, 2)]
+-
+-            val systemDark =
+-                (
+-                        context.resources.configuration.uiMode and
+-                                android.content.res.Configuration.UI_MODE_NIGHT_MASK
+-                        ) ==
+-                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+-
+-            val dark =
+-                mode == 2 ||
+-                        (mode == 0 && systemDark)
+-
+-            return if (dark) {
+-                WidgetPalette(
+-                    surface = Color(0xFF1D1D1F),
+-                    primaryText = Color(0xFFEDEDF0),
+-                    secondaryText = Color(0xFF98989F),
+-                    error = Color(0xFFFF6D80),
+-                    textScale = textScale,
+-                )
+-            } else {
+-                WidgetPalette(
+-                    surface = Color.White,
+-                    primaryText = Color(0xFF181A20),
+-                    secondaryText = Color(0xFF666B76),
+-                    error = Color(0xFFC83C51),
+-                    textScale = textScale,
+-                )
+-            }
+-        }
+-    }
+-}
+-
+ @Composable
+ private fun WidgetSurface(
+     context: Context,
+@@ -603,9 +539,7 @@ private fun EmptyState(
+             style =
+                 TextStyle(
+                     color =
+-                        ColorProvider(
+-                            palette.secondaryText
+-                        ),
++                        fixedColorProvider(palette.secondaryText),
+                     fontSize =
+                         (
+                                 13f *
+@@ -640,52 +574,3 @@ private fun configAction(
+                 )
+             )
+     )
+-
+-private fun newTaskAction(
+-    context: Context,
+-) =
+-    actionStartActivity(
+-        Intent(
+-            context,
+-            MainActivity::class.java,
+-        )
+-            .setAction(
+-                MainActivity.ACTION_NEW_TASK
+-            )
+-            .addFlags(
+-                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+-            )
+-            .setData(
+-                Uri.parse(
+-                    "pix://widget/new"
+-                )
+-            )
+-    )
+-
+-private fun taskAction(
+-    context: Context,
+-    taskId: String,
+-) =
+-    actionStartActivity(
+-        Intent(
+-            context,
+-            MainActivity::class.java,
+-        )
+-            .setAction(
+-                MainActivity.ACTION_OPEN_TASK
+-            )
+-            .addFlags(
+-                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+-            )
+-            .putExtra(
+-                MainActivity.EXTRA_TASK_ID,
+-                taskId,
+-            )
+-            .setData(
+-                Uri.parse(
+-                    "pix://widget/task/$taskId"
+-                )
+-            )
+-    )
+\ No newline at end of file
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetActions.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetActions.kt
+index 3eddfc0..51cf456 100644
+--- a/app/src/main/java/com/example/pix/widget/TaskWidgetActions.kt
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetActions.kt
+@@ -7,6 +7,7 @@ import androidx.glance.appwidget.action.ActionCallback
+ import com.example.pix.PixApplication
+ 
+ val TaskIdKey = ActionParameters.Key<String>("task_id")
++val TaskCompletedKey = ActionParameters.Key<Boolean>("task_completed")
+ 
+ class CompleteTaskAction : ActionCallback {
+     override suspend fun onAction(
+@@ -15,8 +16,9 @@ class CompleteTaskAction : ActionCallback {
+         parameters: ActionParameters,
+     ) {
+         val taskId = parameters[TaskIdKey] ?: return
++        val completed = parameters[TaskCompletedKey] ?: true
+         val app = context.applicationContext as PixApplication
+-        runCatching { app.repository.complete(taskId, true) }
+-        TaskWidget().update(context, glanceId)
++        runCatching { app.repository.complete(taskId, completed) }
++        updateAllPixWidgets(context)
+     }
+ }
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetDateChangeReceiver.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetDateChangeReceiver.kt
+index 5323633..b24d993 100644
+--- a/app/src/main/java/com/example/pix/widget/TaskWidgetDateChangeReceiver.kt
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetDateChangeReceiver.kt
+@@ -3,7 +3,6 @@ package com.example.pix.widget
+ import android.content.BroadcastReceiver
+ import android.content.Context
+ import android.content.Intent
+-import androidx.glance.appwidget.updateAll
+ import com.example.pix.PixApplication
+ import kotlinx.coroutines.launch
+ 
+@@ -13,7 +12,7 @@ class TaskWidgetDateChangeReceiver : BroadcastReceiver() {
+         val app = context.applicationContext as PixApplication
+         app.backgroundScope.launch {
+             try {
+-                TaskWidget().updateAll(context)
++                updateAllPixWidgets(context)
+             } finally {
+                 pending.finish()
+             }
+diff --git a/app/src/main/java/com/example/pix/widget/TaskWidgetUpdater.kt b/app/src/main/java/com/example/pix/widget/TaskWidgetUpdater.kt
+index b3918b0..2127f4e 100644
+--- a/app/src/main/java/com/example/pix/widget/TaskWidgetUpdater.kt
++++ b/app/src/main/java/com/example/pix/widget/TaskWidgetUpdater.kt
+@@ -2,14 +2,19 @@ package com.example.pix.widget
+ 
+ import android.content.Context
+ import android.content.SharedPreferences
+-import androidx.room.InvalidationTracker
+ import androidx.glance.appwidget.updateAll
++import androidx.room.InvalidationTracker
+ import com.example.pix.data.PixDatabase
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.launch
+ 
++suspend fun updateAllPixWidgets(context: Context) {
++    runCatching { TaskWidget().updateAll(context) }
++    runCatching { CalendarWeekWidget().updateAll(context) }
++}
++
+ class TaskWidgetUpdater(
+     private val context: Context,
+     private val database: PixDatabase,
+@@ -26,7 +31,9 @@ class TaskWidgetUpdater(
+ 
+     private val appearanceListener =
+         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+-            if (key == "theme" || key == "accent" || key == "textSize") requestUpdate()
++            if (key == "theme" || key == "accent" || key == "textSize" || key == "fontStyle") {
++                requestUpdate()
++            }
+         }
+ 
+     fun start() {
+@@ -42,7 +49,7 @@ class TaskWidgetUpdater(
+         updateJob =
+             scope.launch {
+                 delay(150)
+-                runCatching { TaskWidget().updateAll(context) }
++                updateAllPixWidgets(context)
+             }
+     }
+ }
+diff --git a/app/src/main/java/com/example/pix/widget/WidgetIntents.kt b/app/src/main/java/com/example/pix/widget/WidgetIntents.kt
+new file mode 100644
+index 0000000..edd6dce
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/WidgetIntents.kt
+@@ -0,0 +1,32 @@
++package com.example.pix.widget
++
++import android.content.Context
++import android.content.Intent
++import android.net.Uri
++import androidx.glance.action.actionStartActivity
++import com.example.pix.MainActivity
++
++internal fun newTaskAction(context: Context, initialDay: Long? = null) =
++    actionStartActivity(
++        Intent(context, MainActivity::class.java)
++            .setAction(MainActivity.ACTION_NEW_TASK)
++            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
++            .apply {
++                if (initialDay != null) putExtra(MainActivity.EXTRA_INITIAL_DAY, initialDay)
++            }
++            .setData(
++                Uri.parse(
++                    if (initialDay == null) "pix://widget/new"
++                    else "pix://widget/new/$initialDay"
++                )
++            )
++    )
++
++internal fun taskAction(context: Context, taskId: String) =
++    actionStartActivity(
++        Intent(context, MainActivity::class.java)
++            .setAction(MainActivity.ACTION_OPEN_TASK)
++            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
++            .putExtra(MainActivity.EXTRA_TASK_ID, taskId)
++            .setData(Uri.parse("pix://widget/task/$taskId"))
++    )
+diff --git a/app/src/main/java/com/example/pix/widget/WidgetTheme.kt b/app/src/main/java/com/example/pix/widget/WidgetTheme.kt
+new file mode 100644
+index 0000000..05c5bf3
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/widget/WidgetTheme.kt
+@@ -0,0 +1,58 @@
++package com.example.pix.widget
++
++import android.content.Context
++import android.content.res.Configuration
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.luminance
++import androidx.glance.unit.ColorProvider
++
++internal data class WidgetPalette(
++    val surface: Color,
++    val primaryText: Color,
++    val secondaryText: Color,
++    val divider: Color,
++    val error: Color,
++    val accent: Color,
++    val onAccent: Color,
++    val textScale: Float,
++) {
++    companion object {
++        fun forContext(context: Context): WidgetPalette {
++            val prefs = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
++            val mode = prefs.getInt("theme", 0)
++            val textScale = listOf(.88f, 1f, 1.15f)[prefs.getInt("textSize", 1).coerceIn(0, 2)]
++            val accent = Color(prefs.getInt("accent", TaskWidgetDataSource.NEUTRAL))
++            val systemDark =
++                (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
++                    Configuration.UI_MODE_NIGHT_YES
++            val dark = mode == 2 || (mode == 0 && systemDark)
++            val onAccent = if (accent.luminance() > .52f) Color(0xFF181A20) else Color.White
++            return if (dark) {
++                WidgetPalette(
++                    surface = Color(0xFF1D1D1F),
++                    primaryText = Color(0xFFEDEDF0),
++                    secondaryText = Color(0xFF98989F),
++                    divider = Color(0xFF34343A),
++                    error = Color(0xFFFF6D80),
++                    accent = accent,
++                    onAccent = onAccent,
++                    textScale = textScale,
++                )
++            } else {
++                WidgetPalette(
++                    surface = Color.White,
++                    primaryText = Color(0xFF181A20),
++                    secondaryText = Color(0xFF666B76),
++                    divider = Color(0xFFE2E4E9),
++                    error = Color(0xFFC83C51),
++                    accent = accent,
++                    onAccent = onAccent,
++                    textScale = textScale,
++                )
++            }
++        }
++    }
++}
++
++internal fun fixedColorProvider(color: Color): ColorProvider =
++    androidx.glance.color.ColorProvider(day = color, night = color)
+diff --git a/app/src/main/res/drawable/ic_widget_calendar.xml b/app/src/main/res/drawable/ic_widget_calendar.xml
+new file mode 100644
+index 0000000..bff4d51
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_widget_calendar.xml
+@@ -0,0 +1,13 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#FFFFFFFF"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:strokeWidth="2"
++        android:pathData="M7,3v3M17,3v3M4,9h16M6,5h12a2,2 0,0 1,2 2v11a2,2 0,0 1,-2 2H6a2,2 0,0 1,-2 -2V7a2,2 0,0 1,2 -2z" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_widget_checked.xml b/app/src/main/res/drawable/ic_widget_checked.xml
+new file mode 100644
+index 0000000..7e8cba2
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_widget_checked.xml
+@@ -0,0 +1,19 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#FFFFFFFF"
++        android:strokeLineJoin="round"
++        android:strokeWidth="2.2"
++        android:pathData="M7,3.5h10A3.5,3.5 0,0 1,20.5 7v10a3.5,3.5 0,0 1,-3.5 3.5H7A3.5,3.5 0,0 1,3.5 17V7A3.5,3.5 0,0 1,7 3.5z" />
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#FFFFFFFF"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:strokeWidth="2.2"
++        android:pathData="M7.5,12.2l3,3 6,-6.4" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_widget_chevron_left.xml b/app/src/main/res/drawable/ic_widget_chevron_left.xml
+new file mode 100644
+index 0000000..28e8854
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_widget_chevron_left.xml
+@@ -0,0 +1,13 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#FFFFFFFF"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:strokeWidth="2.2"
++        android:pathData="M15,5l-7,7 7,7" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_widget_chevron_right.xml b/app/src/main/res/drawable/ic_widget_chevron_right.xml
+new file mode 100644
+index 0000000..7aba891
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_widget_chevron_right.xml
+@@ -0,0 +1,13 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#FFFFFFFF"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:strokeWidth="2.2"
++        android:pathData="M9,5l7,7 -7,7" />
++</vector>
+diff --git a/app/src/main/res/values-it/strings.xml b/app/src/main/res/values-it/strings.xml
+index 03f7cf2..da0f2f9 100644
+--- a/app/src/main/res/values-it/strings.xml
++++ b/app/src/main/res/values-it/strings.xml
+@@ -285,4 +285,16 @@
+ 
+     <string name="widget_description">Le attività di P©ix, configurabili per filtro e raggruppamento.</string>
+ 
++    <string name="task_widget_name">P©ix — Attività</string>
++    <string name="calendar_widget_name">P©ix — Calendario settimanale</string>
++    <string name="calendar_widget_settings">Widget calendario settimanale</string>
++    <string name="calendar_widget_lists">Liste</string>
++    <string name="calendar_widget_all_tags">Tutti i tag</string>
++    <string name="calendar_widget_all_lists">Tutte le liste</string>
++    <string name="calendar_widget_empty">Nessuna attività</string>
++    <string name="calendar_widget_description">Calendario settimanale P©ix con le attività del giorno selezionato.</string>
++    <string name="widget_reopen_task">Riapri %1$s</string>
++
++    <string name="calendar_widget_select_day">Seleziona %1$s %2$d</string>
++
+ </resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 31c6b03..741d2e0 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -285,4 +285,16 @@
+ 
+     <string name="widget_description">Tasks from P©ix, configurable by filter and grouping.</string>
+ 
++    <string name="task_widget_name">P©ix — Tasks</string>
++    <string name="calendar_widget_name">P©ix — Weekly calendar</string>
++    <string name="calendar_widget_settings">Weekly calendar widget</string>
++    <string name="calendar_widget_lists">Lists</string>
++    <string name="calendar_widget_all_tags">All tags</string>
++    <string name="calendar_widget_all_lists">All lists</string>
++    <string name="calendar_widget_empty">No activities</string>
++    <string name="calendar_widget_description">P©ix weekly calendar with tasks for the selected day.</string>
++    <string name="widget_reopen_task">Reopen %1$s</string>
++
++    <string name="calendar_widget_select_day">Select %1$s %2$d</string>
++
+ </resources>
+diff --git a/app/src/main/res/xml/calendar_week_widget_info.xml b/app/src/main/res/xml/calendar_week_widget_info.xml
+new file mode 100644
+index 0000000..cd60187
+--- /dev/null
++++ b/app/src/main/res/xml/calendar_week_widget_info.xml
+@@ -0,0 +1,15 @@
++<?xml version="1.0" encoding="utf-8"?>
++<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
++    android:minWidth="180dp"
++    android:minHeight="150dp"
++    android:minResizeWidth="160dp"
++    android:minResizeHeight="130dp"
++    android:targetCellWidth="4"
++    android:targetCellHeight="4"
++    android:updatePeriodMillis="0"
++    android:initialLayout="@layout/glance_default_loading_layout"
++    android:resizeMode="horizontal|vertical"
++    android:widgetCategory="home_screen"
++    android:description="@string/calendar_widget_description"
++    android:configure="com.example.pix.widget.CalendarWidgetConfigureActivity"
++    android:widgetFeatures="reconfigurable" />
+diff --git a/docs/IMPLEMENTATION_STATUS.md b/docs/IMPLEMENTATION_STATUS.md
+index 199dc41..be4a0d3 100644
+--- a/docs/IMPLEMENTATION_STATUS.md
++++ b/docs/IMPLEMENTATION_STATUS.md
+@@ -1,4 +1,15 @@
+-# Stato implementazione — iterazione 8 (account, cloud, Google Calendar)
++# Stato implementazione — iterazione 9 (widget calendario settimanale)
++
++Questa iterazione aggiunge un secondo Home Screen Widget Glance per la settimana, mantenendo il Task Widget esistente e condividendone tema, azioni e aggiornamento Room senza introdurre nuove tabelle.
++
++| Funzionalità | Stato | Dettagli |
++|---|---|---|
++| Task Widget Glance | IMPLEMENTED | Configurazione per istanza, filtri/raggruppamenti, completamento tramite repository, apertura task/nuova task e layout compatto conservati. |
++| Calendar Week Widget Glance | IMPLEMENTED | Settimana lunedì-domenica, selezione giorno e navigazione senza aprire l'app, ritorno a oggi, task del giorno con semantica intervalli del calendario, filtri Tutte/Tag multi/Inbox/Liste multi e configurazione indipendente per appWidgetId. |
++| Integrazione widget | IMPLEMENTED | Updater Room e receiver data/ora aggiornano entrambi i widget; il + del calendario apre l'editor esistente precompilando la data selezionata. Nessuna migrazione Room. |
++| Verifica iterazione 9 | PARTIAL | XML e sorgenti verificati staticamente. Build Gradle da rieseguire in un ambiente con la distribuzione Gradle 9.5.0 disponibile: il sandbox corrente non può scaricarla da services.gradle.org. Test launcher/device fisico ancora necessari. |
++
++## Iterazione 8 (account, cloud, Google Calendar)
+ 
+ Questa iterazione aggiunge autenticazione Pcix, sync offline-first su Supabase, migrazione dei dati locali preesistenti e Google Calendar in sola lettura. Conserva il core locale della fase 7.
+ Il progetto è un'app persistente, non un mockup. Web/Desktop, widget, Calendar bidirezionale, Storage immagini e Premium restano fuori da questa fase.
+diff --git a/docs/VERIFICATION.md b/docs/VERIFICATION.md
+index 426efcd..5004787 100644
+--- a/docs/VERIFICATION.md
++++ b/docs/VERIFICATION.md
+@@ -1,3 +1,17 @@
++# Verifiche — iterazione 9, 22 settembre 2026
++
++## Widget calendario settimanale
++- Verifica statica completata: tutti i 28 XML delle risorse/Manifest risultano ben formati; tutte le stringhe usate dal nuovo widget esistono in IT e EN; nessun drawable referenziato manca.
++- Nessuna modifica a schema Room, `app/build.gradle.kts` o catalogo versioni.
++- Il percorso dati riusa `TaskRepository.day(day)` / `PixDao.observeDay`, quindi eredita inclusione degli intervalli multi-day e ordinamento del Calendario dell'app.
++- Il completamento/riapertura passa da `TaskRepository.complete`; l'updater condiviso invalida Task Widget e Calendar Week Widget.
++- `./gradlew :app:assembleDebug` è stato tentato prima e dopo le modifiche ma il wrapper non può scaricare Gradle 9.5.0: `java.net.UnknownHostException: services.gradle.org`. Il blocco avviene prima della configurazione/compilazione del progetto e dipende dalla rete del sandbox.
++
++## Da verificare su device
++Aggiunta/ridimensionamento widget, interazioni giorno/settimana/oggi, filtri multi-tag/multi-lista/Inbox, apertura editor con data precompilata, apertura task, completamento/riapertura, due istanze con configurazioni diverse, cambio tema, cambio data a mezzanotte e coesistenza con il Task Widget.
++
++---
++
+ # Verifiche — iterazione 8, 22 settembre 2026
+ 
+ ## Esito finale
