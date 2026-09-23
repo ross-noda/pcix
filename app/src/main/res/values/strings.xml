@@ -312,4 +312,10 @@
     <string name="auth_current_password_invalid">The current password is incorrect.</string>
     <string name="auth_same_password">Choose a password different from the current one.</string>
     <string name="auth_reauthentication_invalid">The verification code is not valid.</string>
+    <string name="logout_pending_title">Unsynced changes</string>
+    <string name="logout_pending_body">Sync failed and %1$d local changes are still pending. You can cancel or sign out while keeping a private recovery copy on this device.</string>
+    <string name="logout_keep_local_copy">Sign out and keep copy</string>
+    <string name="account_safety_failed">The local safety copy could not be created or restored. Your data was not deleted.</string>
+    <string name="account_delete_failed_safe">The backend did not confirm account deletion. Local data was not deleted.</string>
+    <string name="account_operation_not_completed">Operation not completed</string>
 </resources>

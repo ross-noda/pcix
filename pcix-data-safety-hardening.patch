@@ -1,0 +1,894 @@
+diff --git a/app/src/androidTest/java/com/example/pix/cloud/AccountSafetyStoreTest.kt b/app/src/androidTest/java/com/example/pix/cloud/AccountSafetyStoreTest.kt
+new file mode 100644
+index 0000000..e320224
+--- /dev/null
++++ b/app/src/androidTest/java/com/example/pix/cloud/AccountSafetyStoreTest.kt
+@@ -0,0 +1,140 @@
++package com.example.pix.cloud
++
++import android.content.Context
++import android.graphics.Bitmap
++import androidx.room.Room
++import androidx.test.core.app.ApplicationProvider
++import com.example.pix.data.*
++import java.io.File
++import kotlinx.coroutines.runBlocking
++import org.junit.After
++import org.junit.Assert.*
++import org.junit.Before
++import org.junit.Test
++
++class AccountSafetyStoreTest {
++    private val context = ApplicationProvider.getApplicationContext<Context>()
++    private lateinit var db: PixDatabase
++    private lateinit var repo: TaskRepository
++    private lateinit var accounts: AccountStore
++    private val files = mutableListOf<File>()
++
++    @Before
++    fun setUp() = runBlocking {
++        db = Room.inMemoryDatabaseBuilder(context, PixDatabase::class.java).build()
++        repo = TaskRepository(db)
++        repo.initialize()
++        accounts = AccountStore(context, db)
++    }
++
++    @After
++    fun tearDown() {
++        db.close()
++        files.forEach { it.delete() }
++    }
++
++    @Test
++    fun accountSnapshotRestoresDataImagesOutboxAndOwnerIsolationPayload() = runBlocking {
++        val list = ListEntity(name = "A list", color = 2)
++        repo.saveList(list)
++        val tagId = repo.saveTag("A tag", 3)
++        val task = TaskEntity(title = "Offline A", listId = list.id, durationMinutes = 60)
++        repo.create(task, setOf(tagId))
++        repo.saveSubtask(SubtaskEntity(taskId = task.id, title = "child"))
++        val image = ImageStore(context).file(newId() + ".image")
++        files += image
++        image.outputStream().use {
++            Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
++                .compress(Bitmap.CompressFormat.PNG, 100, it)
++        }
++        db.tracked { db.dao().insertImage(TaskImage(taskId = task.id, fileName = image.name)) }
++        db.syncDao().saveState(SyncStateEntity("A", "checkpoint-a", 123L))
++        val pendingBefore = db.syncDao().pendingCount()
++        assertTrue(pendingBefore > 0)
++
++        accounts.protect("A")
++        accounts.wipeUserData()
++        assertNull(repo.details(task.id))
++        assertEquals(0, db.syncDao().pendingCount())
++
++        assertTrue(accounts.restoreProtected("A"))
++        val restored = requireNotNull(repo.details(task.id))
++        assertEquals(task.id, restored.task.id)
++        assertEquals(list.id, restored.task.listId)
++        assertEquals(tagId, restored.tags.single().id)
++        assertEquals("child", restored.subtasks.single().title)
++        assertEquals(60, restored.task.durationMinutes)
++        assertTrue(restored.images.isNotEmpty())
++        val restoredImage = ImageStore(context).file(restored.images.single().fileName)
++        files += restoredImage
++        assertTrue(restoredImage.isFile)
++        assertTrue(db.syncDao().pendingCount() >= pendingBefore)
++        assertEquals("checkpoint-a", db.syncDao().state("A")?.checkpoint)
++    }
++
++    @Test
++    fun accountSnapshotsNeverExposeADataOrOutboxToB() = runBlocking {
++        val a = TaskEntity(title = "A only")
++        repo.create(a)
++        accounts.protect("A")
++
++        accounts.wipeUserData()
++        val b = TaskEntity(title = "B only")
++        repo.create(b)
++        accounts.protect("B")
++
++        accounts.wipeUserData()
++        assertTrue(accounts.restoreProtected("A"))
++        assertNotNull(repo.details(a.id))
++        assertNull(repo.details(b.id))
++        assertTrue(db.syncDao().pending().none { it.entityId == b.id })
++
++        accounts.wipeUserData()
++        assertTrue(accounts.restoreProtected("B"))
++        assertNull(repo.details(a.id))
++        assertNotNull(repo.details(b.id))
++        assertTrue(db.syncDao().pending().none { it.entityId == a.id })
++    }
++
++    @Test
++    fun legacyCloudOnlySnapshotDoesNotMixWithLaterCloudCache() = runBlocking {
++        val legacy = TaskEntity(title = "legacy")
++        repo.create(legacy)
++        accounts.replaceWithCloud()
++
++        val cloud = TaskEntity(title = "cloud")
++        repo.create(cloud)
++
++        assertNull(repo.details(legacy.id))
++        assertNotNull(repo.details(cloud.id))
++        assertTrue(accounts.protectedExists(AccountSafetyStore.LEGACY_OWNER))
++    }
++
++    @Test
++    fun legacyCloudOnlyChoiceCreatesRestorableSnapshotBeforeWipe() = runBlocking {
++        val task = TaskEntity(title = "Legacy keep me")
++        repo.create(task)
++        val id = task.id
++
++        accounts.replaceWithCloud()
++        assertNull(repo.details(id))
++        assertTrue(accounts.protectedExists(AccountSafetyStore.LEGACY_OWNER))
++
++        assertTrue(accounts.restoreLegacy())
++        assertEquals("Legacy keep me", repo.details(id)?.task?.title)
++    }
++
++    @Test
++    fun legacyImportKeepsUuidAndCreatesOutboxWithoutReplacingLocalData() = runBlocking {
++        db.syncDao().clear()
++        val task = TaskEntity(title = "Legacy import")
++        repo.create(task)
++        db.syncDao().clear()
++
++        accounts.importLegacy()
++
++        assertEquals(task.id, repo.details(task.id)?.task?.id)
++        assertTrue(db.syncDao().pending().any { it.entityType == "tasks" && it.entityId == task.id })
++        assertTrue(accounts.protectedExists(AccountSafetyStore.LEGACY_OWNER))
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/PixApplication.kt b/app/src/main/java/com/example/pix/PixApplication.kt
+index eb84090..21340d9 100644
+--- a/app/src/main/java/com/example/pix/PixApplication.kt
++++ b/app/src/main/java/com/example/pix/PixApplication.kt
+@@ -24,6 +24,19 @@ class PixApplication : Application() {
+     val sync by lazy {
+         SyncEngine(database, auth, remote) { ReminderWork.reconcile(this) }
+     }
++    val accountLifecycle by lazy {
++        AccountLifecycleManager(
++            accounts = accounts,
++            syncNow = { sync.synchronize() },
++            signOutLocal = { auth.signOut() },
++            deleteRemote = { auth.deleteAccount() },
++            beforeLocalClear = {
++                CloudSyncWork.cancel(this)
++                GoogleCalendarWork.cancel(this)
++                runCatching { google.disconnect(null) }
++            },
++        )
++    }
+     val google by lazy { GoogleCalendarRepository(this, database, http, cloud) }
+     val widgetUpdater by lazy { TaskWidgetUpdater(this, database, backgroundScope) }
+     val repository by lazy {
+diff --git a/app/src/main/java/com/example/pix/cloud/AccountLifecycleManager.kt b/app/src/main/java/com/example/pix/cloud/AccountLifecycleManager.kt
+new file mode 100644
+index 0000000..8db1605
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/cloud/AccountLifecycleManager.kt
+@@ -0,0 +1,73 @@
++package com.example.pix.cloud
++
++sealed class LogoutOutcome {
++    data object Completed : LogoutOutcome()
++    data class NeedsPendingConfirmation(val pending: Int) : LogoutOutcome()
++    data class Failed(val cause: Throwable) : LogoutOutcome()
++}
++
++sealed class DeleteOutcome {
++    data object Completed : DeleteOutcome()
++    data class Failed(val cause: Throwable) : DeleteOutcome()
++}
++
++/**
++ * Coordinates destructive account transitions. No local wipe is allowed until data is either
++ * synchronized or protected by an internal account snapshot.
++ */
++class AccountLifecycleManager(
++    private val accounts: AccountDataStore,
++    private val syncNow: suspend () -> Boolean,
++    private val signOutLocal: suspend () -> Unit,
++    private val deleteRemote: suspend () -> Result<DeleteAccountConfirmation>,
++    private val beforeLocalClear: suspend () -> Unit = {},
++) {
++    suspend fun logout(allowPendingSnapshot: Boolean = false): LogoutOutcome {
++        val owner = accounts.owner()
++            ?: return try {
++                signOutLocal()
++                LogoutOutcome.Completed
++            } catch (error: Throwable) {
++                LogoutOutcome.Failed(error)
++            }
++        return try {
++            val synced = syncNow()
++            val pending = accounts.pendingMutationCount()
++            if (!synced && pending > 0 && !allowPendingSnapshot) {
++                return LogoutOutcome.NeedsPendingConfirmation(pending)
++            }
++            // Always keep a recovery copy before clearing Room. Besides pending mutations this
++            // protects local-only attachments and reminder state that cloud sync cannot recreate.
++            accounts.protect(owner)
++            beforeLocalClear()
++            signOutLocal()
++            accounts.wipeUserData()
++            accounts.clearGoogle()
++            accounts.setOwner(null)
++            LogoutOutcome.Completed
++        } catch (error: Throwable) {
++            LogoutOutcome.Failed(error)
++        }
++    }
++
++    suspend fun deleteAccount(): DeleteOutcome {
++        val owner = accounts.owner()
++        return try {
++            val confirmation = deleteRemote().getOrElse { return DeleteOutcome.Failed(it) }
++            when (confirmation) {
++                DeleteAccountConfirmation.Deleted,
++                DeleteAccountConfirmation.AlreadyDeleted -> Unit
++            }
++            // Only an explicit backend confirmation reaches this point.
++            beforeLocalClear()
++            signOutLocal()
++            accounts.wipeUserData()
++            accounts.clearGoogle()
++            accounts.setOwner(null)
++            if (owner != null) accounts.deleteProtected(owner)
++            DeleteOutcome.Completed
++        } catch (error: Throwable) {
++            DeleteOutcome.Failed(error)
++        }
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/cloud/AccountSafetyStore.kt b/app/src/main/java/com/example/pix/cloud/AccountSafetyStore.kt
+new file mode 100644
+index 0000000..4fae48c
+--- /dev/null
++++ b/app/src/main/java/com/example/pix/cloud/AccountSafetyStore.kt
+@@ -0,0 +1,118 @@
++package com.example.pix.cloud
++
++import android.content.Context
++import com.example.pix.data.BackupRepository
++import com.example.pix.data.PixDatabase
++import com.example.pix.data.SyncOutboxEntity
++import com.example.pix.data.SyncStateEntity
++import java.io.File
++import java.security.MessageDigest
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import org.json.JSONArray
++import org.json.JSONObject
++
++/** Private, per-account recovery snapshots used before any destructive local replacement. */
++class AccountSafetyStore(
++    private val context: Context,
++    private val db: PixDatabase,
++) {
++    companion object {
++        const val LEGACY_OWNER = "__legacy__"
++    }
++
++    private val backups = BackupRepository(context, db)
++    private val root = File(context.noBackupFilesDir, "account-snapshots")
++
++    suspend fun save(ownerId: String) = withContext(Dispatchers.IO) {
++        root.mkdirs()
++        val target = dir(ownerId)
++        val temp = File(root, target.name + ".tmp-${System.nanoTime()}").apply { mkdirs() }
++        try {
++            File(temp, "data.zip").outputStream().buffered().use { backups.export(it) }
++            val pending = db.syncDao().pending()
++            val states = db.syncDao().states()
++            val sync = JSONObject()
++                .put("owner", ownerId)
++                .put("outbox", JSONArray().apply { pending.forEach { put(it.toJson()) } })
++                .put("state", JSONArray().apply { states.forEach { put(it.toJson()) } })
++            File(temp, "sync.json").writeText(sync.toString())
++            File(temp, "complete").writeText("1")
++            if (target.exists()) target.deleteRecursively()
++            check(temp.renameTo(target)) { "Unable to commit account safety snapshot" }
++        } catch (error: Throwable) {
++            temp.deleteRecursively()
++            throw error
++        }
++    }
++
++    suspend fun restore(ownerId: String): Boolean = withContext(Dispatchers.IO) {
++        val source = dir(ownerId)
++        val archive = File(source, "data.zip")
++        val syncFile = File(source, "sync.json")
++        if (!File(source, "complete").isFile || !archive.isFile || !syncFile.isFile) {
++            return@withContext false
++        }
++        val prepared = archive.inputStream().buffered().use { backups.prepare(it) }
++        backups.restore(prepared)
++        val sync = JSONObject(syncFile.readText())
++        require(sync.getString("owner") == ownerId)
++        db.syncDao().clear()
++        db.syncDao().clearState()
++        sync.getJSONArray("outbox").objects().forEach { db.syncDao().insert(it.toOutbox()) }
++        sync.getJSONArray("state").objects().forEach { db.syncDao().saveState(it.toState()) }
++        // Backup restore may rename local image files. Re-enqueue current entities so UPSERT
++        // payloads exactly describe the restored Room state; DELETE rows remain preserved.
++        OutboxRecorder(db).enqueueAll()
++        true
++    }
++
++    fun exists(ownerId: String): Boolean =
++        File(dir(ownerId), "complete").isFile && File(dir(ownerId), "data.zip").isFile
++
++    fun delete(ownerId: String) {
++        dir(ownerId).deleteRecursively()
++    }
++
++    private fun dir(ownerId: String): File = File(root, hash(ownerId))
++
++    private fun hash(value: String): String =
++        MessageDigest.getInstance("SHA-256")
++            .digest(value.toByteArray(Charsets.UTF_8))
++            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
++
++    private fun SyncOutboxEntity.toJson() = JSONObject()
++        .put("id", id)
++        .put("entityType", entityType)
++        .put("entityId", entityId)
++        .put("operation", operation)
++        .put("payload", payload)
++        .put("createdAt", createdAt)
++        .put("attemptCount", attemptCount)
++        .put("lastAttemptAt", lastAttemptAt ?: JSONObject.NULL)
++
++    private fun SyncStateEntity.toJson() = JSONObject()
++        .put("accountId", accountId)
++        .put("checkpoint", checkpoint ?: JSONObject.NULL)
++        .put("lastSuccessAt", lastSuccessAt)
++
++    private fun JSONObject.toOutbox() = SyncOutboxEntity(
++        id = getString("id"),
++        entityType = getString("entityType"),
++        entityId = getString("entityId"),
++        operation = getString("operation"),
++        payload = getString("payload"),
++        createdAt = getLong("createdAt"),
++        attemptCount = getInt("attemptCount"),
++        lastAttemptAt = if (isNull("lastAttemptAt")) null else getLong("lastAttemptAt"),
++    )
++
++    private fun JSONObject.toState() = SyncStateEntity(
++        accountId = getString("accountId"),
++        checkpoint = if (isNull("checkpoint")) null else getString("checkpoint"),
++        lastSuccessAt = getLong("lastSuccessAt"),
++    )
++
++    private fun JSONArray.objects(): Sequence<JSONObject> =
++        (0 until length()).asSequence().map { getJSONObject(it) }
++}
+diff --git a/app/src/main/java/com/example/pix/cloud/AccountStore.kt b/app/src/main/java/com/example/pix/cloud/AccountStore.kt
+index 0c65f95..8c9eda9 100644
+--- a/app/src/main/java/com/example/pix/cloud/AccountStore.kt
++++ b/app/src/main/java/com/example/pix/cloud/AccountStore.kt
+@@ -11,9 +11,16 @@ interface AccountDataStore {
+     suspend fun hasLegacyData(): Boolean
+     suspend fun wipeUserData()
+     suspend fun clearGoogle()
++    suspend fun pendingMutationCount(): Int = 0
++    suspend fun protect(ownerId: String) = Unit
++    suspend fun restoreProtected(ownerId: String): Boolean = false
++    suspend fun protectLegacy() = Unit
++    fun protectedExists(ownerId: String): Boolean = false
++    fun deleteProtected(ownerId: String) = Unit
+ }
+ 
+ class AccountStore(private val context: Context, private val db: PixDatabase) : AccountDataStore {
++    private val safety = AccountSafetyStore(context, db)
+     private val prefs = context.getSharedPreferences("pcix.account", Context.MODE_PRIVATE)
+ 
+     override fun owner(): String? = prefs.getString("owner", null)
+@@ -37,15 +44,31 @@ class AccountStore(private val context: Context, private val db: PixDatabase) :
+     }
+ 
+     suspend fun importLegacy() {
++        protectLegacy()
+         OutboxRecorder(db).enqueueAll()
+         setLegacyPending(false)
+     }
+ 
+     suspend fun replaceWithCloud() {
++        protectLegacy()
+         wipeUserData()
+         setLegacyPending(false)
+     }
+ 
++    override suspend fun pendingMutationCount(): Int = db.syncDao().pendingCount()
++
++    override suspend fun protect(ownerId: String) = safety.save(ownerId)
++
++    override suspend fun restoreProtected(ownerId: String): Boolean = safety.restore(ownerId)
++
++    override suspend fun protectLegacy() = safety.save(AccountSafetyStore.LEGACY_OWNER)
++
++    suspend fun restoreLegacy(): Boolean = safety.restore(AccountSafetyStore.LEGACY_OWNER)
++
++    override fun protectedExists(ownerId: String): Boolean = safety.exists(ownerId)
++
++    override fun deleteProtected(ownerId: String) = safety.delete(ownerId)
++
+     override suspend fun wipeUserData() {
+         db.withTransaction {
+             db.dao().clearReceipts()
+diff --git a/app/src/main/java/com/example/pix/cloud/AuthRepository.kt b/app/src/main/java/com/example/pix/cloud/AuthRepository.kt
+index 31cf284..3fadf87 100644
+--- a/app/src/main/java/com/example/pix/cloud/AuthRepository.kt
++++ b/app/src/main/java/com/example/pix/cloud/AuthRepository.kt
+@@ -15,6 +15,12 @@ import kotlinx.coroutines.sync.withLock
+ import kotlinx.coroutines.withContext
+ import org.json.JSONObject
+ 
++
++sealed class DeleteAccountConfirmation {
++    data object Deleted : DeleteAccountConfirmation()
++    data object AlreadyDeleted : DeleteAccountConfirmation()
++}
++
+ interface AuthSessionController {
+     val state: StateFlow<AuthState>
+     suspend fun restore()
+@@ -324,7 +330,7 @@ class AuthRepository internal constructor(
+         }
+     }
+ 
+-    suspend fun deleteAccount(): Result<Unit> {
++    suspend fun deleteAccount(): Result<DeleteAccountConfirmation> {
+         var token = accessToken()
+             ?: return Result.failure(noTokenFailure())
+         return try {
+@@ -338,9 +344,16 @@ class AuthRepository internal constructor(
+                 invalidateSession()
+                 return Result.failure(AuthException(com.example.pix.R.string.auth_session_expired))
+             }
+-            if (!response.ok) return responseFailure(response, setState = false)
+-            signOut()
+-            Result.success(Unit)
++            if (response.ok) return Result.success(DeleteAccountConfirmation.Deleted)
++            if (response.code == 404 && response.body.contains("already_deleted")) {
++                return Result.success(DeleteAccountConfirmation.AlreadyDeleted)
++            }
++            Result.failure(
++                AuthException(
++                    AuthErrors.map(response.code, response.body),
++                    response.body.take(200),
++                )
++            )
+         } catch (_: IOException) {
+             Result.failure(AuthException(com.example.pix.R.string.auth_offline))
+         }
+diff --git a/app/src/main/java/com/example/pix/cloud/SessionCoordinator.kt b/app/src/main/java/com/example/pix/cloud/SessionCoordinator.kt
+index b2c018e..0ce1ea0 100644
+--- a/app/src/main/java/com/example/pix/cloud/SessionCoordinator.kt
++++ b/app/src/main/java/com/example/pix/cloud/SessionCoordinator.kt
+@@ -69,7 +69,11 @@ class SessionCoordinator internal constructor(
+                 when {
+                     owner == userId -> publishReadyIfCurrent(user)
+                     owner != null && owner != userId -> {
+-                        accounts.wipeUserData()
++                        // Never expose the previous owner's Room contents to the new account.
++                        // Preserve them first (including outbox) so an offline account switch is recoverable.
++                        accounts.protect(owner)
++                        val restored = accounts.restoreProtected(userId)
++                        if (!restored) accounts.wipeUserData()
+                         accounts.clearGoogle()
+                         accounts.setOwner(userId)
+                         publishReadyIfCurrent(user)
+@@ -80,6 +84,9 @@ class SessionCoordinator internal constructor(
+                         }
+                     }
+                     else -> {
++                        // A prior logout may have archived this account locally. Restore it before
++                        // Home can become Ready, otherwise start from an empty account cache.
++                        accounts.restoreProtected(userId)
+                         accounts.setOwner(userId)
+                         publishReadyIfCurrent(user)
+                     }
+diff --git a/app/src/main/java/com/example/pix/data/PixDatabase.kt b/app/src/main/java/com/example/pix/data/PixDatabase.kt
+index 0ecca34..2259c3d 100644
+--- a/app/src/main/java/com/example/pix/data/PixDatabase.kt
++++ b/app/src/main/java/com/example/pix/data/PixDatabase.kt
+@@ -284,6 +284,9 @@ interface SyncDao {
+     @Query("SELECT * FROM sync_outbox ORDER BY createdAt, id")
+     suspend fun pending(): List<SyncOutboxEntity>
+ 
++    @Query("SELECT COUNT(*) FROM sync_outbox")
++    suspend fun pendingCount(): Int
++
+     @Query("SELECT * FROM sync_outbox WHERE entityType=:type AND entityId=:id")
+     suspend fun pendingFor(type: String, id: String): List<SyncOutboxEntity>
+ 
+@@ -302,6 +305,9 @@ interface SyncDao {
+     @Query("SELECT * FROM sync_state WHERE accountId=:id")
+     suspend fun state(id: String): SyncStateEntity?
+ 
++    @Query("SELECT * FROM sync_state")
++    suspend fun states(): List<SyncStateEntity>
++
+     @Upsert suspend fun saveState(state: SyncStateEntity)
+ 
+     @Query("DELETE FROM sync_state") suspend fun clearState()
+diff --git a/app/src/main/java/com/example/pix/ui/AccountSettings.kt b/app/src/main/java/com/example/pix/ui/AccountSettings.kt
+index bfa3a43..3bb9a17 100644
+--- a/app/src/main/java/com/example/pix/ui/AccountSettings.kt
++++ b/app/src/main/java/com/example/pix/ui/AccountSettings.kt
+@@ -16,8 +16,6 @@ import com.example.pix.R
+ import com.example.pix.cloud.AuthException
+ import com.example.pix.cloud.AuthState
+ import com.example.pix.cloud.CloudSyncStatus
+-import com.example.pix.cloud.CloudSyncWork
+-import com.example.pix.google.GoogleCalendarWork
+ import java.time.Instant
+ import java.time.ZoneId
+ import java.time.format.DateTimeFormatter
+@@ -47,6 +45,8 @@ fun AccountSettings(model: TasksViewModel) {
+     var confirmDelete by remember { mutableStateOf(false) }
+     var changePassword by remember { mutableStateOf(false) }
+     var pending by remember { mutableStateOf(false) }
++    var pendingLogoutCount by remember { mutableIntStateOf(0) }
++    var accountError by remember { mutableIntStateOf(0) }
+     if (auth !is AuthState.Authenticated) return
+     Surface(shape = MaterialTheme.shapes.large) {
+         Column {
+@@ -205,14 +205,16 @@ fun AccountSettings(model: TasksViewModel) {
+                         model.flush()
+                         scope.launch {
+                             pending = true
+-                            runCatching { app.sync.synchronize() }
+-                            CloudSyncWork.cancel(app)
+-                            GoogleCalendarWork.cancel(app)
+-                            runCatching { app.google.disconnect(null) }
+-                            app.auth.signOut()
+-                            app.accounts.wipeUserData()
+-                            app.accounts.clearGoogle()
+-                            app.accounts.setOwner(null)
++                            accountError = 0
++                            when (val outcome = app.accountLifecycle.logout()) {
++                                com.example.pix.cloud.LogoutOutcome.Completed -> Unit
++                                is com.example.pix.cloud.LogoutOutcome.NeedsPendingConfirmation ->
++                                    pendingLogoutCount = outcome.pending
++                                is com.example.pix.cloud.LogoutOutcome.Failed ->
++                                    accountError =
++                                        (outcome.cause as? AuthException)?.messageRes
++                                            ?: R.string.account_safety_failed
++                            }
+                             pending = false
+                         }
+                     }
+@@ -234,11 +236,16 @@ fun AccountSettings(model: TasksViewModel) {
+                     onClick = {
+                         confirmDelete = false
+                         scope.launch {
+-                            runCatching { app.auth.deleteAccount() }
+-                            CloudSyncWork.cancel(app)
+-                            app.accounts.wipeUserData()
+-                            app.accounts.clearGoogle()
+-                            app.accounts.setOwner(null)
++                            pending = true
++                            accountError = 0
++                            when (val outcome = app.accountLifecycle.deleteAccount()) {
++                                com.example.pix.cloud.DeleteOutcome.Completed -> Unit
++                                is com.example.pix.cloud.DeleteOutcome.Failed ->
++                                    accountError =
++                                        (outcome.cause as? AuthException)?.messageRes
++                                            ?: R.string.account_delete_failed_safe
++                            }
++                            pending = false
+                         }
+                     }
+                 ) {
+@@ -249,6 +256,49 @@ fun AccountSettings(model: TasksViewModel) {
+                 TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) }
+             },
+         )
++
++    if (pendingLogoutCount > 0)
++        AlertDialog(
++            onDismissRequest = { pendingLogoutCount = 0 },
++            title = { Text(stringResource(R.string.logout_pending_title)) },
++            text = {
++                Text(stringResource(R.string.logout_pending_body, pendingLogoutCount))
++            },
++            confirmButton = {
++                TextButton(
++                    enabled = !pending,
++                    onClick = {
++                        pendingLogoutCount = 0
++                        scope.launch {
++                            pending = true
++                            accountError = 0
++                            when (val outcome = app.accountLifecycle.logout(allowPendingSnapshot = true)) {
++                                com.example.pix.cloud.LogoutOutcome.Completed -> Unit
++                                is com.example.pix.cloud.LogoutOutcome.NeedsPendingConfirmation ->
++                                    pendingLogoutCount = outcome.pending
++                                is com.example.pix.cloud.LogoutOutcome.Failed ->
++                                    accountError = R.string.account_safety_failed
++                            }
++                            pending = false
++                        }
++                    },
++                ) { Text(stringResource(R.string.logout_keep_local_copy)) }
++            },
++            dismissButton = {
++                TextButton(onClick = { pendingLogoutCount = 0 }) {
++                    Text(stringResource(R.string.cancel))
++                }
++            },
++        )
++    if (accountError != 0)
++        AlertDialog(
++            onDismissRequest = { accountError = 0 },
++            title = { Text(stringResource(R.string.account_operation_not_completed)) },
++            text = { Text(stringResource(accountError)) },
++            confirmButton = {
++                TextButton(onClick = { accountError = 0 }) { Text(stringResource(android.R.string.ok)) }
++            },
++        )
+     if (pending) LinearProgressIndicator(Modifier.fillMaxWidth().padding(8.dp))
+ }
+ 
+diff --git a/app/src/main/res/values-it/strings.xml b/app/src/main/res/values-it/strings.xml
+index 01871a0..2309783 100644
+--- a/app/src/main/res/values-it/strings.xml
++++ b/app/src/main/res/values-it/strings.xml
+@@ -312,4 +312,10 @@
+     <string name="auth_current_password_invalid">La password attuale non è corretta.</string>
+     <string name="auth_same_password">Scegli una password diversa da quella attuale.</string>
+     <string name="auth_reauthentication_invalid">Il codice di verifica non è valido.</string>
++    <string name="logout_pending_title">Modifiche non sincronizzate</string>
++    <string name="logout_pending_body">La sincronizzazione non è riuscita e ci sono %1$d modifiche locali in attesa. Puoi annullare oppure uscire conservando una copia di recupero privata sul dispositivo.</string>
++    <string name="logout_keep_local_copy">Esci e conserva copia</string>
++    <string name="account_safety_failed">Non è stato possibile creare o ripristinare la copia di sicurezza locale. I dati non sono stati cancellati.</string>
++    <string name="account_delete_failed_safe">Il backend non ha confermato l’eliminazione dell’account. I dati locali non sono stati cancellati.</string>
++    <string name="account_operation_not_completed">Operazione non completata</string>
+ </resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 8ace746..1ecfcd6 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -312,4 +312,10 @@
+     <string name="auth_current_password_invalid">The current password is incorrect.</string>
+     <string name="auth_same_password">Choose a password different from the current one.</string>
+     <string name="auth_reauthentication_invalid">The verification code is not valid.</string>
++    <string name="logout_pending_title">Unsynced changes</string>
++    <string name="logout_pending_body">Sync failed and %1$d local changes are still pending. You can cancel or sign out while keeping a private recovery copy on this device.</string>
++    <string name="logout_keep_local_copy">Sign out and keep copy</string>
++    <string name="account_safety_failed">The local safety copy could not be created or restored. Your data was not deleted.</string>
++    <string name="account_delete_failed_safe">The backend did not confirm account deletion. Local data was not deleted.</string>
++    <string name="account_operation_not_completed">Operation not completed</string>
+ </resources>
+diff --git a/app/src/test/java/com/example/pix/cloud/AccountLifecycleManagerTest.kt b/app/src/test/java/com/example/pix/cloud/AccountLifecycleManagerTest.kt
+new file mode 100644
+index 0000000..8a2b23e
+--- /dev/null
++++ b/app/src/test/java/com/example/pix/cloud/AccountLifecycleManagerTest.kt
+@@ -0,0 +1,99 @@
++package com.example.pix.cloud
++
++import kotlinx.coroutines.runBlocking
++import org.junit.Assert.*
++import org.junit.Test
++
++class AccountLifecycleManagerTest {
++    @Test
++    fun logoutOnlineSnapshotsThenClears() = runBlocking {
++        val store = FakeAccountStore(owner = "A", pending = 2)
++        val manager = manager(store, sync = true)
++        assertEquals(LogoutOutcome.Completed, manager.logout())
++        assertEquals(listOf("protect:A", "clear", "google", "owner:null"), store.events)
++        assertTrue(store.signedOut)
++    }
++
++    @Test
++    fun logoutOfflineWithEmptyOutboxIsSafe() = runBlocking {
++        val store = FakeAccountStore(owner = "A", pending = 0)
++        val manager = manager(store, sync = false)
++        assertEquals(LogoutOutcome.Completed, manager.logout())
++        assertTrue(store.protected.contains("A"))
++        assertNull(store.owner())
++    }
++
++    @Test
++    fun logoutOfflineWithPendingOutboxRequiresExplicitDecision() = runBlocking {
++        val store = FakeAccountStore(owner = "A", pending = 3)
++        val manager = manager(store, sync = false)
++        assertEquals(LogoutOutcome.NeedsPendingConfirmation(3), manager.logout())
++        assertEquals("A", store.owner())
++        assertFalse(store.signedOut)
++        assertFalse(store.cleared)
++
++        assertEquals(LogoutOutcome.Completed, manager.logout(allowPendingSnapshot = true))
++        assertTrue(store.protected.contains("A"))
++        assertTrue(store.cleared)
++    }
++
++    @Test
++    fun deleteSuccessAllowsLocalWipe() = runBlocking {
++        val store = FakeAccountStore(owner = "A")
++        val manager = manager(store, delete = Result.success(DeleteAccountConfirmation.Deleted))
++        assertEquals(DeleteOutcome.Completed, manager.deleteAccount())
++        assertTrue(store.cleared)
++        assertNull(store.owner())
++    }
++
++    @Test
++    fun deleteAlreadyDeletedConfirmationAllowsLocalWipe() = runBlocking {
++        val store = FakeAccountStore(owner = "A")
++        val manager = manager(store, delete = Result.success(DeleteAccountConfirmation.AlreadyDeleted))
++        assertEquals(DeleteOutcome.Completed, manager.deleteAccount())
++        assertTrue(store.cleared)
++    }
++
++    @Test
++    fun deleteFailureNeverWipesLocalData() = runBlocking {
++        val store = FakeAccountStore(owner = "A")
++        val failure = IllegalStateException("500")
++        val manager = manager(store, delete = Result.failure(failure))
++        val result = manager.deleteAccount()
++        assertTrue(result is DeleteOutcome.Failed)
++        assertFalse(store.cleared)
++        assertEquals("A", store.owner())
++        assertFalse(store.signedOut)
++    }
++
++    private fun manager(
++        store: FakeAccountStore,
++        sync: Boolean = true,
++        delete: Result<DeleteAccountConfirmation> = Result.success(DeleteAccountConfirmation.Deleted),
++    ) = AccountLifecycleManager(
++        accounts = store,
++        syncNow = { sync },
++        signOutLocal = { store.signedOut = true },
++        deleteRemote = { delete },
++    )
++}
++
++private class FakeAccountStore(
++    private var owner: String?,
++    var pending: Int = 0,
++) : AccountDataStore {
++    val events = mutableListOf<String>()
++    val protected = mutableSetOf<String>()
++    var cleared = false
++    var signedOut = false
++
++    override fun owner(): String? = owner
++    override fun setOwner(id: String?) { owner = id; events += "owner:$id" }
++    override suspend fun hasLegacyData() = false
++    override suspend fun wipeUserData() { cleared = true; events += "clear" }
++    override suspend fun clearGoogle() { events += "google" }
++    override suspend fun pendingMutationCount() = pending
++    override suspend fun protect(ownerId: String) { protected += ownerId; events += "protect:$ownerId" }
++    override suspend fun restoreProtected(ownerId: String) = protected.contains(ownerId)
++    override fun deleteProtected(ownerId: String) { protected -= ownerId }
++}
+diff --git a/app/src/test/java/com/example/pix/cloud/AuthSessionTest.kt b/app/src/test/java/com/example/pix/cloud/AuthSessionTest.kt
+index f3c9bc8..f331783 100644
+--- a/app/src/test/java/com/example/pix/cloud/AuthSessionTest.kt
++++ b/app/src/test/java/com/example/pix/cloud/AuthSessionTest.kt
+@@ -352,6 +352,36 @@ class AuthSessionTest {
+         assertEquals(AuthState.Authenticated(user), repo.state.value)
+     }
+ 
++    @Test
++    fun deleteAccount500DoesNotInvalidateOrPretendSuccess() = runBlocking {
++        val store = FakeSessionStore(session(expiresAt = 5_000))
++        val api = FakeAuthApi().apply { requestResponses.add(response(500, "failed")) }
++        val repo = AuthRepository(config, api, store, nowSeconds = { 1_000 })
++        repo.restore()
++
++        val result = repo.deleteAccount()
++
++        assertTrue(result.isFailure)
++        assertNotNull(store.value)
++        assertEquals(AuthState.Authenticated(user), repo.state.value)
++    }
++
++    @Test
++    fun deleteAccountExplicitAlreadyDeletedIsConfirmedButLocalSessionIsLeftForSafetyCoordinator() = runBlocking {
++        val store = FakeSessionStore(session(expiresAt = 5_000))
++        val api = FakeAuthApi().apply {
++            requestResponses.add(response(404, "{\"code\":\"already_deleted\"}"))
++        }
++        val repo = AuthRepository(config, api, store, nowSeconds = { 1_000 })
++        repo.restore()
++
++        val result = repo.deleteAccount()
++
++        assertEquals(DeleteAccountConfirmation.AlreadyDeleted, result.getOrNull())
++        assertNotNull(store.value)
++        assertEquals(AuthState.Authenticated(user), repo.state.value)
++    }
++
+     private fun session(expiresAt: Long) =
+         AuthSession("access-old", "refresh-old", expiresAt, user)
+ 
+@@ -473,6 +503,34 @@ class SessionCoordinatorGateTest {
+         assertEquals("user-a", owner)
+     }
+ 
++    @Test
++    fun accountSwitchProtectsAAndRestoresBWithoutExposingA() = runBlocking {
++        val auth = FakeAuthController(AuthState.Authenticated(PcixUser("B", "b@example.com")))
++        var owner: String? = "A"
++        val events = mutableListOf<String>()
++        val accounts =
++            object : AccountDataStore {
++                override fun owner(): String? = owner
++                override fun setOwner(id: String?) { owner = id; events += "owner:$id" }
++                override suspend fun hasLegacyData() = false
++                override suspend fun wipeUserData() { events += "wipe" }
++                override suspend fun clearGoogle() { events += "google" }
++                override suspend fun protect(ownerId: String) { events += "protect:$ownerId" }
++                override suspend fun restoreProtected(ownerId: String): Boolean {
++                    events += "restore:$ownerId"
++                    return ownerId == "B"
++                }
++            }
++        val coordinator =
++            SessionCoordinator(auth, accounts, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
++
++        coordinator.afterLogin("B")
++
++        assertEquals(listOf("protect:A", "restore:B", "google", "owner:B"), events)
++        assertEquals("B", owner)
++        assertTrue(coordinator.state.value is AccountSessionState.Ready)
++    }
++
+     @Test
+     fun differentAccountCannotBecomeReadyBeforeOldLocalDataIsWiped() = runBlocking {
+         val auth = FakeAuthController(AuthState.Authenticated(PcixUser("user-b", "b@example.com")))
+diff --git a/docs/RECOVERY_AUDIT.md b/docs/RECOVERY_AUDIT.md
+index 9449785..3a20a1a 100644
+--- a/docs/RECOVERY_AUDIT.md
++++ b/docs/RECOVERY_AUDIT.md
+@@ -548,3 +548,15 @@ Da eseguire sulla macchina Android di sviluppo:
+ - La semantica distruttiva di logout/delete-account/legacy resta quella esistente, salvo il minimo necessario al gating auth; va affrontata nella fase dedicata come già indicato dall'audit.
+ - La verifica end-to-end richiede configurazione reale Supabase (redirect allow-list, email provider/SMTP, Google provider) e device/emulatore per Credential Manager/deep link.
+ - Per una distribuzione futura ad alto livello di assurance può essere valutato un HTTPS Android App Link verificato al posto del custom scheme; PKCE già impedisce comunque lo scambio del recovery auth code senza il verifier del device che ha iniziato il flusso.
++
++## Data safety hardening — account transitions
++
++Verificato e corretto il flusso distruttivo account/cache introdotto dalla fase cloud.
++
++- Logout: una sincronizzazione fallita non viene più ignorata. Con outbox pendente il primo tentativo di logout richiede una decisione esplicita; scegliendo di uscire viene prima creato uno snapshot privato per-account, quindi Room può essere svuotato senza perdere le pending mutation. Anche con outbox vuota viene conservato uno snapshot prima del wipe per proteggere dati locali non ricostruibili dal cloud (es. immagini/reminder state).
++- Cambio account: prima di sostituire Room viene sempre protetto l'owner corrente. Un eventuale snapshot del nuovo account viene ripristinato prima che `SessionCoordinator` possa pubblicare `Ready`; in assenza di snapshot si parte da cache vuota. L'outbox del vecchio owner non resta quindi disponibile al nuovo account.
++- Delete account: il wipe locale è autorizzato soltanto da una conferma backend esplicita (`Deleted` o `AlreadyDeleted`). Offline, timeout, 401, 500 e funzione non disponibile non cancellano la cache locale. La Edge Function restituisce un codice esplicito per il caso già eliminato; un 401 generico non viene trattato come conferma.
++- Legacy: sia `Importa nel mio account` sia `Usa solo i dati cloud` creano prima uno snapshot interno ripristinabile. L'import mantiene UUID/relazioni e accoda gli UPSERT; la scelta cloud-only non distrugge più l'unica copia locale.
++- Snapshot interni: salvati in `noBackupFilesDir`, separati tramite hash dell'user id, includono backup Pcix completo con immagini più `sync_outbox` e `sync_state`. Al ripristino gli UPSERT vengono rigenerati sullo stato Room restaurato, preservando le DELETE pendenti.
++
++Test aggiunti: logout online, logout offline con outbox vuota, logout offline con outbox pendente e decisione esplicita, delete success/failure/already-deleted, account switch A→B con protezione/ripristino, snapshot outbox+immagini, legacy import e legacy cloud-only ripristinabile.
+diff --git a/supabase/functions/delete-account/index.ts b/supabase/functions/delete-account/index.ts
+index 10b1d58..b318a42 100644
+--- a/supabase/functions/delete-account/index.ts
++++ b/supabase/functions/delete-account/index.ts
+@@ -23,7 +23,15 @@ Deno.serve(async (req) => {
+     global: { headers: { Authorization: `Bearer ${jwt}` } },
+   });
+   const { data, error } = await userClient.auth.getUser();
+-  if (error || !data.user) return new Response("unauthorized", { status: 401 });
++  // A JWT that reached the function but no longer maps to an auth user means the
++  // account was already removed. Return an explicit confirmation so clients may
++  // safely clear their local cache without treating arbitrary 401s as deletion.
++  if (error || !data.user) {
++    return new Response(JSON.stringify({ code: "already_deleted" }), {
++      status: 404,
++      headers: { "Content-Type": "application/json" },
++    });
++  }
+   const admin = createClient(url, service);
+   const deleted = await admin.auth.admin.deleteUser(data.user.id);
+   if (deleted.error) return new Response("failed", { status: 500 });

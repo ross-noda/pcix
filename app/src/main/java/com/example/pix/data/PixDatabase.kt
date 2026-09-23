@@ -284,6 +284,9 @@ interface SyncDao {
     @Query("SELECT * FROM sync_outbox ORDER BY createdAt, id")
     suspend fun pending(): List<SyncOutboxEntity>
 
+    @Query("SELECT COUNT(*) FROM sync_outbox")
+    suspend fun pendingCount(): Int
+
     @Query("SELECT * FROM sync_outbox WHERE entityType=:type AND entityId=:id")
     suspend fun pendingFor(type: String, id: String): List<SyncOutboxEntity>
 
@@ -301,6 +304,9 @@ interface SyncDao {
 
     @Query("SELECT * FROM sync_state WHERE accountId=:id")
     suspend fun state(id: String): SyncStateEntity?
+
+    @Query("SELECT * FROM sync_state")
+    suspend fun states(): List<SyncStateEntity>
 
     @Upsert suspend fun saveState(state: SyncStateEntity)
 

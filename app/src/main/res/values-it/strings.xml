@@ -312,4 +312,10 @@
     <string name="auth_current_password_invalid">La password attuale non è corretta.</string>
     <string name="auth_same_password">Scegli una password diversa da quella attuale.</string>
     <string name="auth_reauthentication_invalid">Il codice di verifica non è valido.</string>
+    <string name="logout_pending_title">Modifiche non sincronizzate</string>
+    <string name="logout_pending_body">La sincronizzazione non è riuscita e ci sono %1$d modifiche locali in attesa. Puoi annullare oppure uscire conservando una copia di recupero privata sul dispositivo.</string>
+    <string name="logout_keep_local_copy">Esci e conserva copia</string>
+    <string name="account_safety_failed">Non è stato possibile creare o ripristinare la copia di sicurezza locale. I dati non sono stati cancellati.</string>
+    <string name="account_delete_failed_safe">Il backend non ha confermato l’eliminazione dell’account. I dati locali non sono stati cancellati.</string>
+    <string name="account_operation_not_completed">Operazione non completata</string>
 </resources>

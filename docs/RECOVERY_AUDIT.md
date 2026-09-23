@@ -548,3 +548,15 @@ Da eseguire sulla macchina Android di sviluppo:
 - La semantica distruttiva di logout/delete-account/legacy resta quella esistente, salvo il minimo necessario al gating auth; va affrontata nella fase dedicata come già indicato dall'audit.
 - La verifica end-to-end richiede configurazione reale Supabase (redirect allow-list, email provider/SMTP, Google provider) e device/emulatore per Credential Manager/deep link.
 - Per una distribuzione futura ad alto livello di assurance può essere valutato un HTTPS Android App Link verificato al posto del custom scheme; PKCE già impedisce comunque lo scambio del recovery auth code senza il verifier del device che ha iniziato il flusso.
+
+## Data safety hardening — account transitions
+
+Verificato e corretto il flusso distruttivo account/cache introdotto dalla fase cloud.
+
+- Logout: una sincronizzazione fallita non viene più ignorata. Con outbox pendente il primo tentativo di logout richiede una decisione esplicita; scegliendo di uscire viene prima creato uno snapshot privato per-account, quindi Room può essere svuotato senza perdere le pending mutation. Anche con outbox vuota viene conservato uno snapshot prima del wipe per proteggere dati locali non ricostruibili dal cloud (es. immagini/reminder state).
+- Cambio account: prima di sostituire Room viene sempre protetto l'owner corrente. Un eventuale snapshot del nuovo account viene ripristinato prima che `SessionCoordinator` possa pubblicare `Ready`; in assenza di snapshot si parte da cache vuota. L'outbox del vecchio owner non resta quindi disponibile al nuovo account.
+- Delete account: il wipe locale è autorizzato soltanto da una conferma backend esplicita (`Deleted` o `AlreadyDeleted`). Offline, timeout, 401, 500 e funzione non disponibile non cancellano la cache locale. La Edge Function restituisce un codice esplicito per il caso già eliminato; un 401 generico non viene trattato come conferma.
+- Legacy: sia `Importa nel mio account` sia `Usa solo i dati cloud` creano prima uno snapshot interno ripristinabile. L'import mantiene UUID/relazioni e accoda gli UPSERT; la scelta cloud-only non distrugge più l'unica copia locale.
+- Snapshot interni: salvati in `noBackupFilesDir`, separati tramite hash dell'user id, includono backup Pcix completo con immagini più `sync_outbox` e `sync_state`. Al ripristino gli UPSERT vengono rigenerati sullo stato Room restaurato, preservando le DELETE pendenti.
+
+Test aggiunti: logout online, logout offline con outbox vuota, logout offline con outbox pendente e decisione esplicita, delete success/failure/already-deleted, account switch A→B con protezione/ripristino, snapshot outbox+immagini, legacy import e legacy cloud-only ripristinabile.

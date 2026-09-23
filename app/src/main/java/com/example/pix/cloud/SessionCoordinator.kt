@@ -69,7 +69,11 @@ class SessionCoordinator internal constructor(
                 when {
                     owner == userId -> publishReadyIfCurrent(user)
                     owner != null && owner != userId -> {
-                        accounts.wipeUserData()
+                        // Never expose the previous owner's Room contents to the new account.
+                        // Preserve them first (including outbox) so an offline account switch is recoverable.
+                        accounts.protect(owner)
+                        val restored = accounts.restoreProtected(userId)
+                        if (!restored) accounts.wipeUserData()
                         accounts.clearGoogle()
                         accounts.setOwner(userId)
                         publishReadyIfCurrent(user)
@@ -80,6 +84,9 @@ class SessionCoordinator internal constructor(
                         }
                     }
                     else -> {
+                        // A prior logout may have archived this account locally. Restore it before
+                        // Home can become Ready, otherwise start from an empty account cache.
+                        accounts.restoreProtected(userId)
                         accounts.setOwner(userId)
                         publishReadyIfCurrent(user)
                     }

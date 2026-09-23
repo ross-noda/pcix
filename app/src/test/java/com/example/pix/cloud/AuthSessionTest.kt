@@ -352,6 +352,36 @@ class AuthSessionTest {
         assertEquals(AuthState.Authenticated(user), repo.state.value)
     }
 
+    @Test
+    fun deleteAccount500DoesNotInvalidateOrPretendSuccess() = runBlocking {
+        val store = FakeSessionStore(session(expiresAt = 5_000))
+        val api = FakeAuthApi().apply { requestResponses.add(response(500, "failed")) }
+        val repo = AuthRepository(config, api, store, nowSeconds = { 1_000 })
+        repo.restore()
+
+        val result = repo.deleteAccount()
+
+        assertTrue(result.isFailure)
+        assertNotNull(store.value)
+        assertEquals(AuthState.Authenticated(user), repo.state.value)
+    }
+
+    @Test
+    fun deleteAccountExplicitAlreadyDeletedIsConfirmedButLocalSessionIsLeftForSafetyCoordinator() = runBlocking {
+        val store = FakeSessionStore(session(expiresAt = 5_000))
+        val api = FakeAuthApi().apply {
+            requestResponses.add(response(404, "{\"code\":\"already_deleted\"}"))
+        }
+        val repo = AuthRepository(config, api, store, nowSeconds = { 1_000 })
+        repo.restore()
+
+        val result = repo.deleteAccount()
+
+        assertEquals(DeleteAccountConfirmation.AlreadyDeleted, result.getOrNull())
+        assertNotNull(store.value)
+        assertEquals(AuthState.Authenticated(user), repo.state.value)
+    }
+
     private fun session(expiresAt: Long) =
         AuthSession("access-old", "refresh-old", expiresAt, user)
 
@@ -471,6 +501,34 @@ class SessionCoordinatorGateTest {
         kotlinx.coroutines.yield()
         assertFalse(coordinator.state.value is AccountSessionState.Ready)
         assertEquals("user-a", owner)
+    }
+
+    @Test
+    fun accountSwitchProtectsAAndRestoresBWithoutExposingA() = runBlocking {
+        val auth = FakeAuthController(AuthState.Authenticated(PcixUser("B", "b@example.com")))
+        var owner: String? = "A"
+        val events = mutableListOf<String>()
+        val accounts =
+            object : AccountDataStore {
+                override fun owner(): String? = owner
+                override fun setOwner(id: String?) { owner = id; events += "owner:$id" }
+                override suspend fun hasLegacyData() = false
+                override suspend fun wipeUserData() { events += "wipe" }
+                override suspend fun clearGoogle() { events += "google" }
+                override suspend fun protect(ownerId: String) { events += "protect:$ownerId" }
+                override suspend fun restoreProtected(ownerId: String): Boolean {
+                    events += "restore:$ownerId"
+                    return ownerId == "B"
+                }
+            }
+        val coordinator =
+            SessionCoordinator(auth, accounts, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
+
+        coordinator.afterLogin("B")
+
+        assertEquals(listOf("protect:A", "restore:B", "google", "owner:B"), events)
+        assertEquals("B", owner)
+        assertTrue(coordinator.state.value is AccountSessionState.Ready)
     }
 
     @Test

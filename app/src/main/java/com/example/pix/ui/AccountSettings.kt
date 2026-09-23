@@ -16,8 +16,6 @@ import com.example.pix.R
 import com.example.pix.cloud.AuthException
 import com.example.pix.cloud.AuthState
 import com.example.pix.cloud.CloudSyncStatus
-import com.example.pix.cloud.CloudSyncWork
-import com.example.pix.google.GoogleCalendarWork
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -47,6 +45,8 @@ fun AccountSettings(model: TasksViewModel) {
     var confirmDelete by remember { mutableStateOf(false) }
     var changePassword by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf(false) }
+    var pendingLogoutCount by remember { mutableIntStateOf(0) }
+    var accountError by remember { mutableIntStateOf(0) }
     if (auth !is AuthState.Authenticated) return
     Surface(shape = MaterialTheme.shapes.large) {
         Column {
@@ -205,14 +205,16 @@ fun AccountSettings(model: TasksViewModel) {
                         model.flush()
                         scope.launch {
                             pending = true
-                            runCatching { app.sync.synchronize() }
-                            CloudSyncWork.cancel(app)
-                            GoogleCalendarWork.cancel(app)
-                            runCatching { app.google.disconnect(null) }
-                            app.auth.signOut()
-                            app.accounts.wipeUserData()
-                            app.accounts.clearGoogle()
-                            app.accounts.setOwner(null)
+                            accountError = 0
+                            when (val outcome = app.accountLifecycle.logout()) {
+                                com.example.pix.cloud.LogoutOutcome.Completed -> Unit
+                                is com.example.pix.cloud.LogoutOutcome.NeedsPendingConfirmation ->
+                                    pendingLogoutCount = outcome.pending
+                                is com.example.pix.cloud.LogoutOutcome.Failed ->
+                                    accountError =
+                                        (outcome.cause as? AuthException)?.messageRes
+                                            ?: R.string.account_safety_failed
+                            }
                             pending = false
                         }
                     }
@@ -234,11 +236,16 @@ fun AccountSettings(model: TasksViewModel) {
                     onClick = {
                         confirmDelete = false
                         scope.launch {
-                            runCatching { app.auth.deleteAccount() }
-                            CloudSyncWork.cancel(app)
-                            app.accounts.wipeUserData()
-                            app.accounts.clearGoogle()
-                            app.accounts.setOwner(null)
+                            pending = true
+                            accountError = 0
+                            when (val outcome = app.accountLifecycle.deleteAccount()) {
+                                com.example.pix.cloud.DeleteOutcome.Completed -> Unit
+                                is com.example.pix.cloud.DeleteOutcome.Failed ->
+                                    accountError =
+                                        (outcome.cause as? AuthException)?.messageRes
+                                            ?: R.string.account_delete_failed_safe
+                            }
+                            pending = false
                         }
                     }
                 ) {
@@ -247,6 +254,49 @@ fun AccountSettings(model: TasksViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+
+    if (pendingLogoutCount > 0)
+        AlertDialog(
+            onDismissRequest = { pendingLogoutCount = 0 },
+            title = { Text(stringResource(R.string.logout_pending_title)) },
+            text = {
+                Text(stringResource(R.string.logout_pending_body, pendingLogoutCount))
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !pending,
+                    onClick = {
+                        pendingLogoutCount = 0
+                        scope.launch {
+                            pending = true
+                            accountError = 0
+                            when (val outcome = app.accountLifecycle.logout(allowPendingSnapshot = true)) {
+                                com.example.pix.cloud.LogoutOutcome.Completed -> Unit
+                                is com.example.pix.cloud.LogoutOutcome.NeedsPendingConfirmation ->
+                                    pendingLogoutCount = outcome.pending
+                                is com.example.pix.cloud.LogoutOutcome.Failed ->
+                                    accountError = R.string.account_safety_failed
+                            }
+                            pending = false
+                        }
+                    },
+                ) { Text(stringResource(R.string.logout_keep_local_copy)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingLogoutCount = 0 }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    if (accountError != 0)
+        AlertDialog(
+            onDismissRequest = { accountError = 0 },
+            title = { Text(stringResource(R.string.account_operation_not_completed)) },
+            text = { Text(stringResource(accountError)) },
+            confirmButton = {
+                TextButton(onClick = { accountError = 0 }) { Text(stringResource(android.R.string.ok)) }
             },
         )
     if (pending) LinearProgressIndicator(Modifier.fillMaxWidth().padding(8.dp))

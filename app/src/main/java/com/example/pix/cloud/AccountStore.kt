@@ -11,9 +11,16 @@ interface AccountDataStore {
     suspend fun hasLegacyData(): Boolean
     suspend fun wipeUserData()
     suspend fun clearGoogle()
+    suspend fun pendingMutationCount(): Int = 0
+    suspend fun protect(ownerId: String) = Unit
+    suspend fun restoreProtected(ownerId: String): Boolean = false
+    suspend fun protectLegacy() = Unit
+    fun protectedExists(ownerId: String): Boolean = false
+    fun deleteProtected(ownerId: String) = Unit
 }
 
 class AccountStore(private val context: Context, private val db: PixDatabase) : AccountDataStore {
+    private val safety = AccountSafetyStore(context, db)
     private val prefs = context.getSharedPreferences("pcix.account", Context.MODE_PRIVATE)
 
     override fun owner(): String? = prefs.getString("owner", null)
@@ -37,14 +44,30 @@ class AccountStore(private val context: Context, private val db: PixDatabase) : 
     }
 
     suspend fun importLegacy() {
+        protectLegacy()
         OutboxRecorder(db).enqueueAll()
         setLegacyPending(false)
     }
 
     suspend fun replaceWithCloud() {
+        protectLegacy()
         wipeUserData()
         setLegacyPending(false)
     }
+
+    override suspend fun pendingMutationCount(): Int = db.syncDao().pendingCount()
+
+    override suspend fun protect(ownerId: String) = safety.save(ownerId)
+
+    override suspend fun restoreProtected(ownerId: String): Boolean = safety.restore(ownerId)
+
+    override suspend fun protectLegacy() = safety.save(AccountSafetyStore.LEGACY_OWNER)
+
+    suspend fun restoreLegacy(): Boolean = safety.restore(AccountSafetyStore.LEGACY_OWNER)
+
+    override fun protectedExists(ownerId: String): Boolean = safety.exists(ownerId)
+
+    override fun deleteProtected(ownerId: String) = safety.delete(ownerId)
 
     override suspend fun wipeUserData() {
         db.withTransaction {

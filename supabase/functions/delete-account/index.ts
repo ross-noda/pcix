@@ -23,7 +23,15 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
   const { data, error } = await userClient.auth.getUser();
-  if (error || !data.user) return new Response("unauthorized", { status: 401 });
+  // A JWT that reached the function but no longer maps to an auth user means the
+  // account was already removed. Return an explicit confirmation so clients may
+  // safely clear their local cache without treating arbitrary 401s as deletion.
+  if (error || !data.user) {
+    return new Response(JSON.stringify({ code: "already_deleted" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const admin = createClient(url, service);
   const deleted = await admin.auth.admin.deleteUser(data.user.id);
   if (deleted.error) return new Response("failed", { status: 500 });

@@ -15,6 +15,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+
+sealed class DeleteAccountConfirmation {
+    data object Deleted : DeleteAccountConfirmation()
+    data object AlreadyDeleted : DeleteAccountConfirmation()
+}
+
 interface AuthSessionController {
     val state: StateFlow<AuthState>
     suspend fun restore()
@@ -324,7 +330,7 @@ class AuthRepository internal constructor(
         }
     }
 
-    suspend fun deleteAccount(): Result<Unit> {
+    suspend fun deleteAccount(): Result<DeleteAccountConfirmation> {
         var token = accessToken()
             ?: return Result.failure(noTokenFailure())
         return try {
@@ -338,9 +344,16 @@ class AuthRepository internal constructor(
                 invalidateSession()
                 return Result.failure(AuthException(com.example.pix.R.string.auth_session_expired))
             }
-            if (!response.ok) return responseFailure(response, setState = false)
-            signOut()
-            Result.success(Unit)
+            if (response.ok) return Result.success(DeleteAccountConfirmation.Deleted)
+            if (response.code == 404 && response.body.contains("already_deleted")) {
+                return Result.success(DeleteAccountConfirmation.AlreadyDeleted)
+            }
+            Result.failure(
+                AuthException(
+                    AuthErrors.map(response.code, response.body),
+                    response.body.take(200),
+                )
+            )
         } catch (_: IOException) {
             Result.failure(AuthException(com.example.pix.R.string.auth_offline))
         }

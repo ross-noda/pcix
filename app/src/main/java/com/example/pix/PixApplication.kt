@@ -24,6 +24,19 @@ class PixApplication : Application() {
     val sync by lazy {
         SyncEngine(database, auth, remote) { ReminderWork.reconcile(this) }
     }
+    val accountLifecycle by lazy {
+        AccountLifecycleManager(
+            accounts = accounts,
+            syncNow = { sync.synchronize() },
+            signOutLocal = { auth.signOut() },
+            deleteRemote = { auth.deleteAccount() },
+            beforeLocalClear = {
+                CloudSyncWork.cancel(this)
+                GoogleCalendarWork.cancel(this)
+                runCatching { google.disconnect(null) }
+            },
+        )
+    }
     val google by lazy { GoogleCalendarRepository(this, database, http, cloud) }
     val widgetUpdater by lazy { TaskWidgetUpdater(this, database, backgroundScope) }
     val repository by lazy {
