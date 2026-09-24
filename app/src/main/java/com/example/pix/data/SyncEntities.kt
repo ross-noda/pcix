@@ -2,6 +2,11 @@ package com.example.pix.data
 
 import androidx.room.*
 
+/**
+ * Persistent local final-state mutation. `createdAt` orders queued snapshots; conflict authority is
+ * the server-issued `server_version` persisted in [SyncEntityVersionEntity]. `updated_at` remains
+ * user-data metadata in UPSERT payloads and is never used to resolve multi-device conflicts.
+ */
 @Entity(tableName = "sync_outbox", indices = [Index("entityType", "entityId")])
 data class SyncOutboxEntity(
     @PrimaryKey val id: String = newId(),
@@ -19,6 +24,20 @@ data class SyncStateEntity(
     @PrimaryKey val accountId: String,
     val checkpoint: String? = null,
     val lastSuccessAt: Long = 0,
+    @ColumnInfo(defaultValue = "'Idle'") val status: String = "Idle",
+)
+
+@Entity(
+    tableName = "sync_entity_versions",
+    primaryKeys = ["accountId", "entityType", "entityId"],
+    indices = [Index("accountId", "serverVersion")],
+)
+data class SyncEntityVersionEntity(
+    val accountId: String,
+    val entityType: String,
+    val entityId: String,
+    val serverVersion: Long,
+    val deleted: Boolean = false,
 )
 
 @Entity(tableName = "google_calendars")
@@ -68,7 +87,5 @@ data class GoogleSyncStateEntity(
     val syncToken: String? = null,
     val lastSyncAt: Long = 0,
 )
-
-data class IdStamp(val id: String, val updatedAt: Long)
 
 data class TagLink(val taskId: String, val tagId: String)

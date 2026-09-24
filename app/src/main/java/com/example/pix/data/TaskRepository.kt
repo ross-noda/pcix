@@ -344,8 +344,11 @@ class TaskRepository(
             val target = index + direction
             if (index >= 0 && target in rows.indices) {
                 java.util.Collections.swap(rows, index, target)
+                val now = System.currentTimeMillis()
                 rows.forEachIndexed { order, row ->
-                    dao.saveSubtask(row.copy(sortOrder = order.toLong()))
+                    dao.saveSubtask(
+                        row.copy(sortOrder = order.toLong(), updatedAt = now)
+                    )
                 }
                 recurrence.refreshSubtaskTemplate(taskId, scope)
             }

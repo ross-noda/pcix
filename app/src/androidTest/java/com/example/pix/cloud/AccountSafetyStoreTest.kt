@@ -48,7 +48,16 @@ class AccountSafetyStoreTest {
                 .compress(Bitmap.CompressFormat.PNG, 100, it)
         }
         db.tracked { db.dao().insertImage(TaskImage(taskId = task.id, fileName = image.name)) }
-        db.syncDao().saveState(SyncStateEntity("A", "checkpoint-a", 123L))
+        db.syncDao().saveState(SyncStateEntity("A", "checkpoint-a", 123L, "Offline"))
+        db.syncDao()
+            .saveVersion(
+                SyncEntityVersionEntity(
+                    accountId = "A",
+                    entityType = "tasks",
+                    entityId = task.id,
+                    serverVersion = 9L,
+                )
+            )
         val pendingBefore = db.syncDao().pendingCount()
         assertTrue(pendingBefore > 0)
 
@@ -70,6 +79,8 @@ class AccountSafetyStoreTest {
         assertTrue(restoredImage.isFile)
         assertTrue(db.syncDao().pendingCount() >= pendingBefore)
         assertEquals("checkpoint-a", db.syncDao().state("A")?.checkpoint)
+        assertEquals("Offline", db.syncDao().state("A")?.status)
+        assertEquals(9L, db.syncDao().version("A", "tasks", task.id)?.serverVersion)
     }
 
     @Test

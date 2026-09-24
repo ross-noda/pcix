@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.pix.cloud.tracked
 import com.example.pix.domain.RecurrenceRule
 import com.example.pix.domain.TaskRules
 import com.example.pix.domain.TaskTiming
@@ -213,7 +214,7 @@ class BackupRepository(private val context: Context, private val database: PixDa
                         }
                     row.put("fileName", name)
                 }
-                database.withTransaction {
+                database.tracked {
                     val sql = database.openHelper.writableDatabase
                     tables.asReversed().forEach { sql.execSQL("DELETE FROM $it") }
                     insert(sql, all)

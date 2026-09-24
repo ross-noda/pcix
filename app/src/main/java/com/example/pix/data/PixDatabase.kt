@@ -55,6 +55,9 @@ interface PixDao {
     @Query("SELECT * FROM recurring_series WHERE id=:id")
     suspend fun series(id: String): RecurringSeriesEntity?
 
+    @Query("DELETE FROM recurring_series WHERE id=:id")
+    suspend fun deleteSeries(id: String)
+
     @Query("UPDATE tasks SET seriesId=:series, originalDay=:day, updatedAt=:now WHERE id=:id")
     suspend fun attachSeries(
         id: String,
@@ -222,15 +225,19 @@ interface PixDao {
 
     @Query("SELECT * FROM lists WHERE id=:id") suspend fun listById(id: String): ListEntity?
 
-    @Query("SELECT id, updatedAt FROM lists") suspend fun listStamps(): List<IdStamp>
+    // Full cloud-visible snapshots used by the transactional outbox audit. Keeping these as bulk
+    // queries avoids N+1 reads on every local mutation while still detecting same-millisecond edits.
+    @Query("SELECT * FROM lists") suspend fun syncLists(): List<ListEntity>
 
-    @Query("SELECT id, updatedAt FROM tags") suspend fun tagStamps(): List<IdStamp>
+    @Query("SELECT * FROM tags") suspend fun syncTags(): List<TagEntity>
 
-    @Query("SELECT id, updatedAt FROM tasks") suspend fun taskStamps(): List<IdStamp>
+    @Query("SELECT * FROM tasks") suspend fun syncTasks(): List<TaskEntity>
 
-    @Query("SELECT id, updatedAt FROM subtasks") suspend fun subtaskStamps(): List<IdStamp>
+    @Query("SELECT * FROM subtasks") suspend fun syncSubtasks(): List<SubtaskEntity>
 
-    @Query("SELECT id, updatedAt FROM recurring_series") suspend fun seriesStamps(): List<IdStamp>
+    @Query("SELECT * FROM recurring_series") suspend fun syncSeries(): List<RecurringSeriesEntity>
+
+    @Query("SELECT * FROM task_images") suspend fun syncImages(): List<TaskImage>
 
     @Query("SELECT * FROM tags WHERE id=:id") suspend fun tagById(id: String): TagEntity?
 
@@ -240,8 +247,6 @@ interface PixDao {
 
     @Query("SELECT taskId AS taskId, tagId AS tagId FROM task_tags")
     suspend fun tagLinks(): List<TagLink>
-
-    @Query("SELECT id FROM task_images") suspend fun imageIds(): List<String>
 
     @Query("SELECT COUNT(*) FROM tasks WHERE isTemplate=0 AND isSkipped=0")
     suspend fun visibleTaskCount(): Int
@@ -290,12 +295,15 @@ interface SyncDao {
     @Query("SELECT * FROM sync_outbox WHERE entityType=:type AND entityId=:id")
     suspend fun pendingFor(type: String, id: String): List<SyncOutboxEntity>
 
+    @Query("SELECT * FROM sync_outbox WHERE id=:id")
+    suspend fun pendingById(id: String): SyncOutboxEntity?
+
     @Insert suspend fun insert(row: SyncOutboxEntity)
 
     @Query("DELETE FROM sync_outbox WHERE id=:id") suspend fun remove(id: String)
 
-    @Query("DELETE FROM sync_outbox WHERE entityType=:type AND entityId=:id AND operation=:op")
-    suspend fun removeMatching(type: String, id: String, op: String)
+    @Query("DELETE FROM sync_outbox WHERE entityType=:type AND entityId=:id")
+    suspend fun removeEntity(type: String, id: String)
 
     @Query("UPDATE sync_outbox SET attemptCount=attemptCount+1, lastAttemptAt=:now WHERE id=:id")
     suspend fun attempted(id: String, now: Long)
@@ -311,6 +319,21 @@ interface SyncDao {
     @Upsert suspend fun saveState(state: SyncStateEntity)
 
     @Query("DELETE FROM sync_state") suspend fun clearState()
+
+    @Query(
+        "SELECT * FROM sync_entity_versions WHERE accountId=:accountId AND entityType=:type AND entityId=:id"
+    )
+    suspend fun version(accountId: String, type: String, id: String): SyncEntityVersionEntity?
+
+    @Query("SELECT * FROM sync_entity_versions WHERE accountId=:accountId")
+    suspend fun versions(accountId: String): List<SyncEntityVersionEntity>
+
+    @Upsert suspend fun saveVersion(version: SyncEntityVersionEntity)
+
+    @Query("DELETE FROM sync_entity_versions WHERE accountId=:accountId")
+    suspend fun clearVersions(accountId: String)
+
+    @Query("DELETE FROM sync_entity_versions") suspend fun clearAllVersions()
 }
 
 @Dao
@@ -367,11 +390,12 @@ interface GoogleDao {
             RecurringSeriesEntity::class,
             SyncOutboxEntity::class,
             SyncStateEntity::class,
+            SyncEntityVersionEntity::class,
             GoogleCalendarEntity::class,
             GoogleEventEntity::class,
             GoogleSyncStateEntity::class,
         ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class PixDatabase : RoomDatabase() {
@@ -382,6 +406,22 @@ abstract class PixDatabase : RoomDatabase() {
     abstract fun googleDao(): GoogleDao
 
     companion object {
+        val MIGRATION_6_7 =
+            object : androidx.room.migration.Migration(6, 7) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    // v2 cloud sync checkpoints are server_version cursors, not synced_at timestamps.
+                    // Force one safe full pull when upgrading from the old timestamp protocol.
+                    db.execSQL("ALTER TABLE sync_state ADD COLUMN status TEXT NOT NULL DEFAULT 'Idle'")
+                    db.execSQL("UPDATE sync_state SET checkpoint=NULL, status='Idle'")
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS sync_entity_versions (accountId TEXT NOT NULL, entityType TEXT NOT NULL, entityId TEXT NOT NULL, serverVersion INTEGER NOT NULL, deleted INTEGER NOT NULL, PRIMARY KEY(accountId, entityType, entityId))"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_sync_entity_versions_accountId_serverVersion ON sync_entity_versions(accountId, serverVersion)"
+                    )
+                }
+            }
+
         val MIGRATION_5_6 =
             object : androidx.room.migration.Migration(5, 6) {
                 override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -477,6 +517,7 @@ abstract class PixDatabase : RoomDatabase() {
                     MIGRATION_3_4,
                     MIGRATION_4_5,
                     MIGRATION_5_6,
+                    MIGRATION_6_7,
                 )
                 .build()
     }

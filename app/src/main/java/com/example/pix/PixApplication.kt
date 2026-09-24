@@ -67,6 +67,7 @@ class PixApplication : Application() {
             backgroundScope.launch {
                 session.state.collect { state ->
                     if (state is AccountSessionState.Ready) {
+                        sync.restoreForAccount(state.user.id)
                         CloudSyncWork.enqueue(this@PixApplication)
                     }
                 }

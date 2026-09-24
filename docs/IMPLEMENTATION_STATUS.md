@@ -1,4 +1,21 @@
-# Stato implementazione — iterazione 9 (widget calendario settimanale)
+# Stato implementazione — iterazione 10 (outbox transazionale)
+
+Questa iterazione hardena il boundary offline-first: ogni mutazione locale cloud-relevant passa da una transazione Room che comprende sia lo stato applicativo sia la relativa outbox. Il protocollo remoto `UPSERT`/`DELETE` non è stato riscritto.
+
+| Funzionalità | Stato | Dettagli |
+|---|---|---|
+| Outbox atomica | IMPLEMENTED | `TaskRepository.mutate` usa `PixDatabase.tracked`; dato Room + delta outbox fanno commit/rollback insieme. Anche restore backup ed enqueue-all legacy/recovery sono transazionali. |
+| Rilevazione mutazioni | IMPLEMENTED | Snapshot cloud-visible completo con query bulk, non più solo `updatedAt`; copre same-millisecond edit e protegge da timestamp bump dimenticati. |
+| Coalescing / retry | IMPLEMENTED | Una final-state op per identità; UPSERT→DELETE conserva il tombstone; nuova mutazione usa un nuovo outbox id e resetta i retry della nuova versione senza permettere a un ack in volo di cancellarla. |
+| Riordino sottotask | IMPLEMENTED | Corretto `moveSubtask`: il cambio `sortOrder` aggiorna anche `updatedAt`. |
+| Notification/widget actions | IMPLEMENTED | Completa/Posticipa da notifica e complete da widget transitano dal medesimo `TaskRepository`. Nessun DAO write cloud-relevant diretto da ViewModel/Receiver. |
+| Test outbox | PARTIAL | Aggiunta suite instrumented per CRUD, undo, snooze, reorder, link tag, sottotask, ricorrenze/template/split, immagini, retry, coalescing e rollback. Esecuzione bloccata nel sandbox perché Gradle 9.5.0 non è scaricabile senza rete. |
+
+Dettaglio dell'audit in `docs/OUTBOX_AUDIT.md`.
+
+---
+
+## Iterazione 9 (widget calendario settimanale)
 
 Questa iterazione aggiunge un secondo Home Screen Widget Glance per la settimana, mantenendo il Task Widget esistente e condividendone tema, azioni e aggiornamento Room senza introdurre nuove tabelle.
 
@@ -94,7 +111,7 @@ I font sono inclusi con licenze OFL. Niente nuove librerie per UI calendario o D
 - Senza autorizzazione notifiche non viene emesso alcun promemoria; la UI lo segnala. Senza accesso exact alarms la consegna può essere ritardata da Android.
 - Force-stop manuale dell’app e restrizioni aggressive del produttore possono impedire l’esecuzione in background fino alla riapertura.
 - Posticipa arrotonda al minuto successivo: almeno 60 minuti, al massimo 60 minuti e 59 secondi; il modello task conserva precisione al minuto.
-- Le modifiche locali non sono ancora gestite tramite outbox transazionale: dopo crash fra commit Room e richiesta worker, la riconciliazione all’avvio/periodica recupera gli allarmi.
+- Le mutazioni locali cloud-relevant sono protette da outbox transazionale Room; restano da validare su device/CI i test instrumented completi e gli scenari di kill reale del processo.
 - Ricevuta scritta dopo pubblicazione: un crash in quel brevissimo intervallo può ripubblicare la stessa notifica (stessa identità, onlyAlertOnce).
 - La ricerca Unicode usa il comportamento LIKE di SQLite; la deduplicazione tag è invece Unicode NFC/Locale.ROOT.
 - Il debounce non garantisce il salvataggio degli ultimissimi caratteri in caso di uccisione forzata immediata del processo.

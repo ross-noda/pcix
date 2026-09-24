@@ -17,26 +17,42 @@ class AuthAndSyncRulesTest {
     }
 
     @Test
-    fun tombstoneWinsAndSkipsPendingDeletes() {
+    fun serverVersionsAndTombstonesDriveRemoteApplication() {
         assertEquals(
             RemoteAction.DELETE,
-            ConflictPolicy.applyRemote(true, 20, 10, pendingDelete = false, pendingUpsertUpdated = null),
+            ConflictPolicy.applyRemote(
+                remoteDeleted = true,
+                remoteVersion = 20,
+                appliedVersion = 10,
+                pendingOperation = "UPSERT",
+            ),
         )
         assertEquals(
             RemoteAction.SKIP,
-            ConflictPolicy.applyRemote(true, 20, 10, pendingDelete = true, pendingUpsertUpdated = null),
+            ConflictPolicy.applyRemote(
+                remoteDeleted = false,
+                remoteVersion = 20,
+                appliedVersion = 20,
+                pendingOperation = null,
+            ),
         )
         assertEquals(
             RemoteAction.SKIP,
-            ConflictPolicy.applyRemote(false, 5, 10, pendingDelete = false, pendingUpsertUpdated = null),
+            ConflictPolicy.applyRemote(
+                remoteDeleted = false,
+                remoteVersion = 21,
+                appliedVersion = 20,
+                pendingOperation = "DELETE",
+            ),
         )
         assertEquals(
             RemoteAction.UPSERT,
-            ConflictPolicy.applyRemote(false, 15, 10, pendingDelete = false, pendingUpsertUpdated = null),
-        )
-        assertEquals(
-            RemoteAction.SKIP,
-            ConflictPolicy.applyRemote(false, 15, 10, pendingDelete = false, pendingUpsertUpdated = 20),
+            ConflictPolicy.applyRemote(
+                remoteDeleted = false,
+                remoteVersion = 21,
+                appliedVersion = 20,
+                pendingOperation = null,
+            ),
         )
     }
 }

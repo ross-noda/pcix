@@ -15,11 +15,14 @@ Nessuna service-role key deve entrare nell’APK o in git. Solo URL e anon/publi
 
 ## 2. Database e RLS
 
-Nel SQL Editor (o `supabase db push`) esegui:
+Nel SQL Editor (o con `supabase db push`) applica **in ordine**:
 
 ```text
 supabase/migrations/0001_pcix_cloud.sql
+supabase/migrations/0002_sync_protocol_v2.sql
 ```
+
+La seconda migrazione è obbligatoria per il client corrente: introduce acknowledgement deterministico, `server_version`, tombstone durevoli, receipt idempotenti e pull keyset. Dopo v2 le scritture cloud del client passano dalla RPC `pcix_apply_mutation`; il ruolo `authenticated` non ha più DML diretto sulle sette tabelle sincronizzate.
 
 Verifica che RLS sia attivo su tutte le tabelle `lists`, `tags`, `tasks`, `recurring_series`, `subtasks`, `task_tags`, `task_images`.
 Un utente non deve vedere `user_id` diversi dal proprio JWT.

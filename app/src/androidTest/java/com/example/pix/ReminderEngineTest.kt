@@ -119,6 +119,28 @@ class ReminderEngineTest {
         assertTrue(db.dao().task(t.id)!!.isCompleted)
     }
 
+
+    @Test
+    fun notificationActionsUseRepositoryAndTransactionalOutbox() = runBlocking {
+        val t = task(719)
+        repository.create(t)
+        db.syncDao().clear()
+        val trigger = ReminderRules.trigger(t, ZoneOffset.UTC)!!
+
+        engine.act(t.id, trigger, ACTION_SNOOZE, repository)
+        var queued = db.syncDao().pendingFor("tasks", t.id).single()
+        assertEquals("UPSERT", queued.operation)
+        assertEquals(780, org.json.JSONObject(queued.payload).getInt("minute_of_day"))
+
+        db.syncDao().clear()
+        val snoozed = db.dao().task(t.id)!!
+        val snoozedTrigger = ReminderRules.trigger(snoozed, ZoneOffset.UTC)!!
+        engine.act(t.id, snoozedTrigger, ACTION_COMPLETE, repository)
+        queued = db.syncDao().pendingFor("tasks", t.id).single()
+        assertEquals("UPSERT", queued.operation)
+        assertTrue(org.json.JSONObject(queued.payload).getBoolean("is_completed"))
+    }
+
     private class FakeGateway : ReminderGateway {
         var allowed = true
         var known = emptyMap<String, Long>()

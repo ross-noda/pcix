@@ -20,7 +20,7 @@ enum class CloudSyncStatus {
 class SyncEngine(
     private val db: PixDatabase,
     private val auth: AuthRepository,
-    private val remote: RemoteDataSource,
+    private val remote: SyncRemote,
     private val onReminders: () -> Unit,
 ) {
     private val mutex = Mutex()
@@ -28,6 +28,11 @@ class SyncEngine(
     val status: StateFlow<CloudSyncStatus> = _status
     private val _lastSuccess = MutableStateFlow(0L)
     val lastSuccess: StateFlow<Long> = _lastSuccess
+    private var loadedAccount: String? = null
+
+    /** Hydrates Settings -> Data from Room before a network worker necessarily runs. */
+    suspend fun restoreForAccount(accountId: String) =
+        mutex.withLock { restoreForAccountLocked(accountId) }
 
     suspend fun synchronize(): Boolean =
         mutex.withLock {
@@ -40,7 +45,8 @@ class SyncEngine(
                 _status.value = CloudSyncStatus.Idle
                 return false
             }
-            _status.value = CloudSyncStatus.Syncing
+            if (loadedAccount != user.id) restoreForAccountLocked(user.id)
+            persistStatus(user.id, CloudSyncStatus.Syncing)
             return try {
                 var token = auth.accessToken()
                 if (token == null) {
@@ -63,36 +69,84 @@ class SyncEngine(
                     }
                 }
                 val now = System.currentTimeMillis()
+                val state = db.syncDao().state(user.id) ?: SyncStateEntity(user.id)
+                db.syncDao().saveState(state.copy(lastSuccessAt = now, status = CloudSyncStatus.Idle.name))
                 _lastSuccess.value = now
                 _status.value = CloudSyncStatus.Idle
-                onReminders()
                 true
             } catch (_: java.io.IOException) {
                 Log.w("PcixSync", "offline or network error")
-                _status.value = CloudSyncStatus.Offline
+                persistStatus(user.id, CloudSyncStatus.Offline)
                 false
             } catch (_: RemoteDataSource.Unauthorized) {
                 Log.w("PcixSync", "session rejected")
-                _status.value = CloudSyncStatus.Error
+                persistStatus(user.id, CloudSyncStatus.Error)
                 false
             } catch (error: Exception) {
                 Log.w("PcixSync", "sync failed: ${error.javaClass.simpleName}")
-                _status.value = CloudSyncStatus.Error
+                persistStatus(user.id, CloudSyncStatus.Error)
                 false
             }
         }
 
-    private suspend fun push(token: String, userId: String) {
-        val pending = db.syncDao().pending()
+    private suspend fun restoreForAccountLocked(accountId: String) {
+        var state = db.syncDao().state(accountId) ?: SyncStateEntity(accountId)
+        // A persisted Syncing means the previous process/worker ended before publishing a terminal
+        // state. Mark it Error instead of leaving Settings permanently stuck on "syncing".
+        val restored = parseStatus(state.status)
+        if (restored == CloudSyncStatus.Syncing) {
+            state = state.copy(status = CloudSyncStatus.Error.name)
+            db.syncDao().saveState(state)
+        }
+        loadedAccount = accountId
+        _lastSuccess.value = state.lastSuccessAt
+        _status.value = parseStatus(state.status)
+    }
+
+    private suspend fun persistStatus(accountId: String, status: CloudSyncStatus) {
+        val state = db.syncDao().state(accountId) ?: SyncStateEntity(accountId)
+        db.syncDao().saveState(state.copy(status = status.name))
+        loadedAccount = accountId
+        _lastSuccess.value = state.lastSuccessAt
+        _status.value = status
+    }
+
+    private fun parseStatus(raw: String): CloudSyncStatus =
+        runCatching { CloudSyncStatus.valueOf(raw) }
+            .getOrDefault(CloudSyncStatus.Error)
+            .let { if (it == CloudSyncStatus.Unconfigured) CloudSyncStatus.Error else it }
+
+    private suspend fun push(token: String, accountId: String) {
+        // The outbox is final-state based, so cross-entity ordering can be dependency-safe without
+        // changing per-identity LWW semantics. Create/update parents before children; send all live
+        // final states before deletes; for deletes, detach/delete children before their parents.
+        val pending = db.syncDao().pending().sortedWith(outboxOrder)
         for (row in pending) {
             try {
-                if (row.operation == "DELETE") {
-                    val parts = row.entityId.split('|', limit = 2)
-                    remote.tombstone(token, row.entityType, parts[0], parts.getOrNull(1))
-                } else {
-                    remote.upsert(token, row.entityType, userId, JSONObject(row.payload))
+                val ack = remote.push(token, row)
+                validateAck(row, ack)
+                db.withTransaction {
+                    // A newer local mutation may already have replaced this outbox id while the
+                    // request was in flight. Removing by id therefore acknowledges only the exact
+                    // snapshot that was sent.
+                    if (ack.deleted) {
+                        deleteLocal(row.entityType, row.entityId)
+                        db.syncDao().removeEntity(row.entityType, row.entityId)
+                    } else {
+                        db.syncDao().remove(row.id)
+                    }
+                    db.syncDao()
+                        .saveVersion(
+                            SyncEntityVersionEntity(
+                                accountId = accountId,
+                                entityType = row.entityType,
+                                entityId = row.entityId,
+                                serverVersion = ack.serverVersion,
+                                deleted = ack.deleted,
+                            )
+                        )
                 }
-                db.syncDao().remove(row.id)
+                if (row.entityType == "tasks" && ack.deleted) onReminders()
             } catch (unauthorized: RemoteDataSource.Unauthorized) {
                 throw unauthorized
             } catch (io: java.io.IOException) {
@@ -106,95 +160,190 @@ class SyncEngine(
         }
     }
 
-    private suspend fun pull(token: String, accountId: String) {
-        val tables =
-            listOf(
-                "lists",
-                "tags",
-                "tasks",
-                "recurring_series",
-                "subtasks",
-                "task_tags",
-                "task_images",
-            )
-        val state = db.syncDao().state(accountId)
-        var checkpoint = state?.checkpoint
-        var newest = checkpoint
-        for (table in tables) {
-            var offset = 0
-            do {
-                val page = remote.pull(token, table, checkpoint, offset)
-                apply(table, page.rows)
-                newest = maxOfNullable(newest, page.newest)
-                offset += page.rows.size
-                if (!page.more) break
-            } while (page.rows.isNotEmpty())
-        }
-        db.syncDao()
-            .saveState(
-                SyncStateEntity(accountId, newest, System.currentTimeMillis())
-            )
-        _lastSuccess.value = System.currentTimeMillis()
-    }
 
-    private suspend fun apply(table: String, rows: List<JSONObject>) {
-        if (rows.isEmpty()) return
-        db.withTransaction {
-            rows.forEach { row -> applyRow(table, row) }
-        }
-    }
+    private val outboxOrder =
+        compareBy<SyncOutboxEntity>(
+            { if (it.operation == OutboxRecorder.UPSERT) 0 else 1 },
+            {
+                if (it.operation == OutboxRecorder.UPSERT) {
+                    when (it.entityType) {
+                        "lists" -> 0
+                        "tags" -> 1
+                        "tasks" -> 2
+                        "recurring_series" -> 3
+                        "subtasks" -> 4
+                        "task_tags", "task_images" -> 5
+                        else -> 99
+                    }
+                } else {
+                    when (it.entityType) {
+                        "task_tags", "task_images", "subtasks", "recurring_series" -> 0
+                        "tasks" -> 1
+                        "tags" -> 2
+                        "lists" -> 3
+                        else -> 99
+                    }
+                }
+            },
+            { it.createdAt },
+            { it.id },
+        )
 
-    private suspend fun applyRow(table: String, row: JSONObject) {
-        val deleted = !row.isNull("deleted_at")
-        val updated = row.optLong("updated_at")
-        val id =
-            if (table == "task_tags") OutboxRecorder.linkId(row.getString("task_id"), row.getString("tag_id"))
-            else row.getString("id")
-        val pending = db.syncDao().pendingFor(table, id)
-        val pendingDelete = pending.any { it.operation == "DELETE" }
-        val pendingUpsert =
-            pending.filter { it.operation == "UPSERT" }.maxOfOrNull {
-                runCatching { JSONObject(it.payload).optLong("updated_at") }.getOrDefault(0)
-            }
-        val localUpdated = localStamp(table, id)
-        when (
-            ConflictPolicy.applyRemote(deleted, updated, localUpdated, pendingDelete, pendingUpsert)
+    private fun validateAck(row: SyncOutboxEntity, ack: PushAck) {
+        val expectedParts = row.entityId.split('|', limit = 2)
+        val expectedId = expectedParts[0]
+        val expectedId2 = if (row.entityType == "task_tags") expectedParts.getOrNull(1) else null
+        if (
+            ack.mutationId != row.id ||
+                ack.entityType != row.entityType ||
+                ack.entityId != expectedId ||
+                ack.entityId2 != expectedId2 ||
+                ack.serverVersion <= 0
         ) {
-            RemoteAction.SKIP -> Unit
-            RemoteAction.DELETE -> deleteLocal(table, row)
-            RemoteAction.UPSERT ->
-                runCatching { upsertLocal(table, row) }
-                    .onFailure { Log.w("PcixSync", "skip malformed $table") }
+            throw RemoteDataSource.ProtocolError("push ack identity mismatch")
+        }
+        if (ack.outcome !in setOf("APPLIED", "DELETED", "TOMBSTONED")) {
+            throw RemoteDataSource.ProtocolError("unknown push outcome")
+        }
+        if (ack.outcome == "APPLIED" && ack.deleted) {
+            throw RemoteDataSource.ProtocolError("inconsistent push ack")
+        }
+        if (ack.outcome != "APPLIED" && !ack.deleted) {
+            throw RemoteDataSource.ProtocolError("inconsistent tombstone ack")
         }
     }
 
-    private suspend fun localStamp(table: String, id: String): Long? =
-        when (table) {
-            "lists" -> db.dao().listById(id)?.updatedAt
-            "tags" -> db.dao().tagById(id)?.updatedAt
-            "tasks" -> db.dao().task(id)?.updatedAt
-            "subtasks" -> db.dao().subtaskById(id)?.updatedAt
-            "recurring_series" -> db.dao().series(id)?.updatedAt
-            "task_images" -> db.dao().imageById(id)?.createdAt
-            "task_tags" -> if (db.dao().tagLinks().any { OutboxRecorder.linkId(it.taskId, it.tagId) == id }) 1 else null
-            else -> null
+    private suspend fun pull(token: String, accountId: String) {
+        val initial = db.syncDao().state(accountId) ?: SyncStateEntity(accountId)
+        val checkpoint = initial.checkpoint?.toLongOrNull() ?: 0L
+        val through = remote.snapshot(token)
+        if (through < checkpoint) throw RemoteDataSource.ProtocolError("server version moved backwards")
+
+        var cursor = checkpoint
+        while (cursor < through) {
+            val page = remote.pull(token, cursor, through)
+            if (page.rows.isEmpty()) {
+                throw RemoteDataSource.ProtocolError("pull ended before snapshot high-water mark")
+            }
+            if (page.nextCursor <= cursor || page.nextCursor > through) {
+                throw RemoteDataSource.ProtocolError("invalid pull cursor")
+            }
+            val touchedReminders = apply(accountId, page.rows)
+            if (touchedReminders) onReminders()
+            cursor = page.nextCursor
+            if (!page.more && cursor < through) {
+                throw RemoteDataSource.ProtocolError("pull page stopped before snapshot high-water mark")
+            }
+            if (!page.more) break
         }
 
-    private suspend fun deleteLocal(table: String, row: JSONObject) {
-        when (table) {
-            "lists" -> {
-                val id = row.getString("id")
-                if (id != INBOX_ID) {
-                    db.dao().moveToInbox(id)
-                    db.dao().deleteList(id)
+        // Advance only after every requested page was parsed and committed. If any page throws,
+        // this write is never reached; a retry starts from the previous global checkpoint.
+        val current = db.syncDao().state(accountId) ?: initial
+        db.syncDao().saveState(current.copy(checkpoint = through.toString()))
+    }
+
+    private suspend fun apply(accountId: String, rows: List<RemoteChange>): Boolean {
+        if (rows.isEmpty()) return false
+        var touchedReminders = false
+        db.withTransaction {
+            rows.forEach { change ->
+                if (applyChange(accountId, change) && change.entityType == "tasks") {
+                    touchedReminders = true
                 }
             }
-            "tags" -> db.dao().deleteTag(row.getString("id"))
-            "tasks" -> db.dao().deleteTask(row.getString("id"))
-            "subtasks" -> db.dao().deleteSubtask(row.getString("id"))
-            "recurring_series" -> db.dao().deleteTask(row.optString("template_task_id"))
-            "task_images" -> db.dao().deleteImage(row.getString("id"))
-            "task_tags" -> db.dao().detachTag(row.getString("task_id"), row.getString("tag_id"))
+        }
+        return touchedReminders
+    }
+
+    /** Returns true when the local canonical row actually changed. */
+    private suspend fun applyChange(accountId: String, change: RemoteChange): Boolean {
+        RemoteDataSource.validateEntity(change.entityType)
+        val localId = localIdentity(change)
+        val appliedVersion =
+            db.syncDao().version(accountId, change.entityType, localId)?.serverVersion
+        val pending = db.syncDao().pendingFor(change.entityType, localId).singleOrNull()
+        val action =
+            ConflictPolicy.applyRemote(
+                remoteDeleted = change.deleted,
+                remoteVersion = change.serverVersion,
+                appliedVersion = appliedVersion,
+                pendingOperation = pending?.operation,
+            )
+        var changed = false
+        when (action) {
+            RemoteAction.SKIP -> Unit
+            RemoteAction.DELETE -> {
+                if (change.entityType == "lists" && change.entityId == INBOX_ID) {
+                    throw RemoteDataSource.ProtocolError("remote attempted to delete Inbox")
+                }
+                deleteLocal(change.entityType, localId)
+                // A server tombstone is terminal for this identity. In particular, discard an
+                // offline stale UPSERT so it cannot resurrect the record on the next push.
+                db.syncDao().removeEntity(change.entityType, localId)
+                changed = true
+            }
+            RemoteAction.UPSERT -> {
+                val payload = change.payload ?: throw RemoteDataSource.ProtocolError("missing payload")
+                validatePayloadIdentity(change, payload)
+                upsertLocal(change.entityType, payload)
+                changed = true
+            }
+        }
+        if (appliedVersion == null || appliedVersion < change.serverVersion) {
+            db.syncDao()
+                .saveVersion(
+                    SyncEntityVersionEntity(
+                        accountId = accountId,
+                        entityType = change.entityType,
+                        entityId = localId,
+                        serverVersion = change.serverVersion,
+                        deleted = change.deleted,
+                    )
+                )
+        }
+        return changed
+    }
+
+    private fun localIdentity(change: RemoteChange): String =
+        if (change.entityType == "task_tags") {
+            val tag = change.entityId2 ?: throw RemoteDataSource.ProtocolError("missing task_tags tag id")
+            OutboxRecorder.linkId(change.entityId, tag)
+        } else change.entityId
+
+    private fun validatePayloadIdentity(change: RemoteChange, row: JSONObject) {
+        if (change.entityType == "task_tags") {
+            if (
+                row.getString("task_id") != change.entityId ||
+                    row.getString("tag_id") != change.entityId2
+            ) {
+                throw RemoteDataSource.ProtocolError("task_tags payload identity mismatch")
+            }
+        } else if (row.getString("id") != change.entityId) {
+            throw RemoteDataSource.ProtocolError("payload identity mismatch")
+        }
+    }
+
+    private suspend fun deleteLocal(table: String, localId: String) {
+        when (table) {
+            "lists" -> {
+                if (localId != INBOX_ID) {
+                    db.dao().moveToInbox(localId)
+                    db.dao().deleteList(localId)
+                }
+            }
+            "tags" -> db.dao().deleteTag(localId)
+            "tasks" -> db.dao().deleteTask(localId)
+            "subtasks" -> db.dao().deleteSubtask(localId)
+            // Deleting a series tombstone must not delete its template/task graph. Any task/template
+            // deletion required by a scoped recurrence edit arrives as its own task tombstone.
+            "recurring_series" -> db.dao().deleteSeries(localId)
+            "task_images" -> db.dao().deleteImage(localId)
+            "task_tags" -> {
+                val parts = localId.split('|', limit = 2)
+                if (parts.size != 2) throw RemoteDataSource.ProtocolError("invalid task_tags identity")
+                db.dao().detachTag(parts[0], parts[1])
+            }
         }
     }
 
@@ -212,7 +361,4 @@ class SyncEngine(
     }
 
     suspend fun pendingCount() = db.syncDao().pending().size
-
-    private fun maxOfNullable(a: String?, b: String?): String? =
-        listOfNotNull(a, b).maxOrNull()
 }

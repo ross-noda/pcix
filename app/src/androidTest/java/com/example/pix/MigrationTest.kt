@@ -19,6 +19,7 @@ class MigrationTest {
             PixDatabase.MIGRATION_3_4,
             PixDatabase.MIGRATION_4_5,
             PixDatabase.MIGRATION_5_6,
+            PixDatabase.MIGRATION_6_7,
         )
 
     @Test fun versionOneDataSurvivesMigration() = verifyMigration(1)
@@ -32,7 +33,7 @@ class MigrationTest {
     @Test fun versionFiveDataSurvivesMigration() = verifyMigration(5)
 
     @Test
-    fun versionSixOutboxAndCalendarCachePersistAcrossReopen() = runBlocking {
+    fun versionSixOutboxAndCalendarCachePersistAcrossV7Migration() = runBlocking {
         val context = instrumentation.targetContext
         val name = "migration-v6-reopen-${System.nanoTime()}.db"
         try {
@@ -70,8 +71,10 @@ class MigrationTest {
                 assertEquals(200L, pending.lastAttemptAt)
 
                 val syncState = db.syncDao().state("account-1")!!
-                assertEquals("checkpoint-1", syncState.checkpoint)
+                assertNull(syncState.checkpoint)
                 assertEquals(300L, syncState.lastSuccessAt)
+                assertEquals("Idle", syncState.status)
+                assertTrue(db.syncDao().versions("account-1").isEmpty())
 
                 val calendar = db.googleDao().calendars().single()
                 assertEquals("calendar-1", calendar.id)
@@ -103,14 +106,14 @@ class MigrationTest {
     }
 
     private fun verifyMigration(version: Int) {
-        val name = "migration-v${version}-to-v6-${System.nanoTime()}.db"
+        val name = "migration-v${version}-to-v7-${System.nanoTime()}.db"
         try {
             helper.createDatabase(name, version).use { db -> seedLegacyData(db, version) }
 
-            helper.runMigrationsAndValidate(name, 6, true, *migrations).use { db ->
+            helper.runMigrationsAndValidate(name, 7, true, *migrations).use { db ->
                 assertCoreData(db, version)
                 assertVersionSpecificData(db, version)
-                assertVersionSixInfrastructure(db)
+                assertVersionSevenInfrastructure(db)
                 assertNoForeignKeyViolations(db)
             }
         } finally {
@@ -360,18 +363,19 @@ class MigrationTest {
         }
     }
 
-    private fun assertVersionSixInfrastructure(db: SupportSQLiteDatabase) {
+    private fun assertVersionSevenInfrastructure(db: SupportSQLiteDatabase) {
         val expectedTables =
             setOf(
                 "sync_outbox",
                 "sync_state",
+                "sync_entity_versions",
                 "google_calendars",
                 "google_events",
                 "google_sync_state",
             )
         val actual = mutableSetOf<String>()
         db.query(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sync_outbox','sync_state','google_calendars','google_events','google_sync_state')"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sync_outbox','sync_state','sync_entity_versions','google_calendars','google_events','google_sync_state')"
             )
             .use { cursor ->
                 while (cursor.moveToNext()) actual += cursor.getString(0)
@@ -382,7 +386,10 @@ class MigrationTest {
             "INSERT INTO sync_outbox(id,entityType,entityId,operation,payload,createdAt,attemptCount,lastAttemptAt) VALUES('migration-outbox','tasks','$TASK_ID','UPSERT','{}',1,0,NULL)"
         )
         db.execSQL(
-            "INSERT INTO sync_state(accountId,checkpoint,lastSuccessAt) VALUES('migration-account','checkpoint',2)"
+            "INSERT INTO sync_state(accountId,checkpoint,lastSuccessAt,status) VALUES('migration-account','7',2,'Offline')"
+        )
+        db.execSQL(
+            "INSERT INTO sync_entity_versions(accountId,entityType,entityId,serverVersion,deleted) VALUES('migration-account','tasks','$TASK_ID',7,0)"
         )
         assertEquals(
             1L,
@@ -390,7 +397,11 @@ class MigrationTest {
         )
         assertEquals(
             1L,
-            db.scalarLong("SELECT COUNT(*) FROM sync_state WHERE accountId='migration-account'"),
+            db.scalarLong("SELECT COUNT(*) FROM sync_state WHERE accountId='migration-account' AND checkpoint='7' AND status='Offline'"),
+        )
+        assertEquals(
+            1L,
+            db.scalarLong("SELECT COUNT(*) FROM sync_entity_versions WHERE accountId='migration-account' AND serverVersion=7"),
         )
     }
 

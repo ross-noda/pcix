@@ -8,7 +8,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-class CloudHttp(private val config: CloudConfig) {
+open class CloudHttp(private val config: CloudConfig) {
     private val json = "application/json; charset=utf-8".toMediaType()
     val client: OkHttpClient =
         OkHttpClient.Builder()
@@ -22,7 +22,7 @@ class CloudHttp(private val config: CloudConfig) {
             get() = code in 200..299
     }
 
-    fun request(
+    open fun request(
         method: String,
         path: String,
         accessToken: String?,
@@ -48,6 +48,6 @@ class CloudHttp(private val config: CloudConfig) {
         }
     }
 
-    fun auth(path: String, body: JSONObject, accessToken: String? = null) =
+    open fun auth(path: String, body: JSONObject, accessToken: String? = null) =
         request("POST", "/auth/v1$path", accessToken ?: config.anonKey, body.toString())
 }

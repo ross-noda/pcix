@@ -1,22 +1,23 @@
 package com.example.pix.cloud
 
+/**
+ * Local application policy for an authoritative server change stream.
+ *
+ * Live update/update conflicts are resolved by server commit order (`server_version`). A local
+ * pending mutation is kept visible until it is pushed, so a live remote UPSERT is not allowed to
+ * overwrite that optimistic state. Tombstones are different: deletion is terminal for the same
+ * identity and therefore removes stale local state even when an UPSERT is pending.
+ */
 object ConflictPolicy {
-    /**
-     * Last-write-wins among live updates using client `updatedAt` millis. A tombstone always wins:
-     * deleted records are never resurrected by an older or equal update.
-     */
     fun applyRemote(
         remoteDeleted: Boolean,
-        remoteUpdated: Long,
-        localUpdated: Long?,
-        pendingDelete: Boolean,
-        pendingUpsertUpdated: Long?,
+        remoteVersion: Long,
+        appliedVersion: Long?,
+        pendingOperation: String?,
     ): RemoteAction {
-        if (pendingDelete) return RemoteAction.SKIP
+        if (appliedVersion != null && appliedVersion >= remoteVersion) return RemoteAction.SKIP
         if (remoteDeleted) return RemoteAction.DELETE
-        val pending = pendingUpsertUpdated
-        if (pending != null && pending > remoteUpdated) return RemoteAction.SKIP
-        if (localUpdated != null && localUpdated > remoteUpdated) return RemoteAction.SKIP
+        if (pendingOperation != null) return RemoteAction.SKIP
         return RemoteAction.UPSERT
     }
 }

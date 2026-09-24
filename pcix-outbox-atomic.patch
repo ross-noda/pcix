@@ -1,0 +1,951 @@
+diff --git a/SYNC_ARCHITECTURE.md b/SYNC_ARCHITECTURE.md
+index ee3cddb..e111d44 100644
+--- a/SYNC_ARCHITECTURE.md
++++ b/SYNC_ARCHITECTURE.md
+@@ -23,7 +23,7 @@ Senza URL/anon key la Home locale resta usabile: niente login finto.
+ ## Scrittura offline
+ 
+ 1. Mutazione Room.
+-2. Diff snapshot nella stessa transazione → `UPSERT` / `DELETE` in outbox (coalescing per id).
++2. Diff dello snapshot cloud-visible completo nella stessa transazione → `UPSERT` / `DELETE` in outbox (coalescing per identità). Il confronto non dipende soltanto da `updatedAt`, quindi cattura anche edit nello stesso millisecondo.
+ 3. UI via Flow.
+ 4. `cloud-sync` WorkManager con rete e backoff.
+ 
+diff --git a/app/src/androidTest/java/com/example/pix/BackupRepositoryTest.kt b/app/src/androidTest/java/com/example/pix/BackupRepositoryTest.kt
+index 1c5786e..7c32d9c 100644
+--- a/app/src/androidTest/java/com/example/pix/BackupRepositoryTest.kt
++++ b/app/src/androidTest/java/com/example/pix/BackupRepositoryTest.kt
+@@ -106,8 +106,18 @@ class BackupRepositoryTest {
+         assertEquals(2, prepared.tasks)
+         assertEquals(2, prepared.lists)
+         assertEquals(1, prepared.tags)
++        db.syncDao().clear()
+         backups.restore(prepared)
+         assertNull(repo.details(extra.id))
++        assertEquals(
++            "DELETE",
++            db.syncDao().pendingFor("tasks", extra.id).single().operation,
++        )
++        assertTrue(
++            db.syncDao().pending().any {
++                it.entityType == "task_images" && it.operation == "UPSERT"
++            }
++        )
+         val result = repo.details(task.id)!!
+         assertEquals(2880, result.task.durationMinutes)
+         assertTrue(result.task.isCompleted)
+diff --git a/app/src/androidTest/java/com/example/pix/ReminderEngineTest.kt b/app/src/androidTest/java/com/example/pix/ReminderEngineTest.kt
+index 4b23e2d..50d56fb 100644
+--- a/app/src/androidTest/java/com/example/pix/ReminderEngineTest.kt
++++ b/app/src/androidTest/java/com/example/pix/ReminderEngineTest.kt
+@@ -119,6 +119,28 @@ class ReminderEngineTest {
+         assertTrue(db.dao().task(t.id)!!.isCompleted)
+     }
+ 
++
++    @Test
++    fun notificationActionsUseRepositoryAndTransactionalOutbox() = runBlocking {
++        val t = task(719)
++        repository.create(t)
++        db.syncDao().clear()
++        val trigger = ReminderRules.trigger(t, ZoneOffset.UTC)!!
++
++        engine.act(t.id, trigger, ACTION_SNOOZE, repository)
++        var queued = db.syncDao().pendingFor("tasks", t.id).single()
++        assertEquals("UPSERT", queued.operation)
++        assertEquals(780, org.json.JSONObject(queued.payload).getInt("minute_of_day"))
++
++        db.syncDao().clear()
++        val snoozed = db.dao().task(t.id)!!
++        val snoozedTrigger = ReminderRules.trigger(snoozed, ZoneOffset.UTC)!!
++        engine.act(t.id, snoozedTrigger, ACTION_COMPLETE, repository)
++        queued = db.syncDao().pendingFor("tasks", t.id).single()
++        assertEquals("UPSERT", queued.operation)
++        assertTrue(org.json.JSONObject(queued.payload).getBoolean("is_completed"))
++    }
++
+     private class FakeGateway : ReminderGateway {
+         var allowed = true
+         var known = emptyMap<String, Long>()
+diff --git a/patch_new/app/src/androidTest/java/com/example/pix/TransactionalOutboxAuditTest.kt b/app/src/androidTest/java/com/example/pix/TransactionalOutboxAuditTest.kt
+new file mode 100644
+index 0000000..9668598
+--- /dev/null
++++ b/app/src/androidTest/java/com/example/pix/TransactionalOutboxAuditTest.kt
+@@ -0,0 +1,365 @@
++package com.example.pix
++
++import androidx.room.Room
++import androidx.test.core.app.ApplicationProvider
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import com.example.pix.cloud.OutboxRecorder
++import com.example.pix.cloud.tracked
++import com.example.pix.data.*
++import com.example.pix.domain.Frequency
++import com.example.pix.domain.RecurrenceRule
++import java.time.Instant
++import java.time.LocalDate
++import java.time.ZoneOffset
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.runBlocking
++import org.json.JSONObject
++import org.junit.After
++import org.junit.Assert.*
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++
++@RunWith(AndroidJUnit4::class)
++class TransactionalOutboxAuditTest {
++    private lateinit var db: PixDatabase
++    private lateinit var repo: TaskRepository
++
++    @Before
++    fun setup() = runBlocking {
++        db =
++            Room.inMemoryDatabaseBuilder(
++                    ApplicationProvider.getApplicationContext(),
++                    PixDatabase::class.java,
++                )
++                .build()
++        repo = TaskRepository(db)
++        repo.initialize()
++        db.syncDao().clear()
++    }
++
++    @After fun close() = db.close()
++
++    private suspend fun pending(type: String, id: String) = db.syncDao().pendingFor(type, id)
++
++    private suspend fun single(type: String, id: String) = pending(type, id).single()
++
++    private suspend fun assertUpsert(type: String, id: String): JSONObject {
++        val row = single(type, id)
++        assertEquals(OutboxRecorder.UPSERT, row.operation)
++        return JSONObject(row.payload)
++    }
++
++    private suspend fun assertDelete(type: String, id: String) {
++        val row = single(type, id)
++        assertEquals(OutboxRecorder.DELETE, row.operation)
++        assertEquals("{}", row.payload)
++    }
++
++    @Test
++    fun taskCrudCompletionUndoSnoozeDurationAndMatrixAreQueued() = runBlocking {
++        val day = LocalDate.of(2026, 9, 23).toEpochDay()
++        val task = TaskEntity(title = "Atomic", dueDay = day, minuteOfDay = 600)
++
++        repo.create(task)
++        assertEquals("Atomic", assertUpsert("tasks", task.id).getString("title"))
++
++        db.syncDao().clear()
++        repo.edit(
++            task.copy(
++                title = "Edited",
++                durationMinutes = 90,
++                matrixUrgent = true,
++                matrixImportant = false,
++            ),
++            emptySet(),
++        )
++        val edited = assertUpsert("tasks", task.id)
++        assertEquals("Edited", edited.getString("title"))
++        assertEquals(90, edited.getInt("duration_minutes"))
++        assertTrue(edited.getBoolean("matrix_urgent"))
++        assertFalse(edited.getBoolean("matrix_important"))
++
++        db.syncDao().clear()
++        repo.complete(task.id, true)
++        assertTrue(assertUpsert("tasks", task.id).getBoolean("is_completed"))
++
++        db.syncDao().clear()
++        repo.complete(task.id, false)
++        assertFalse(assertUpsert("tasks", task.id).getBoolean("is_completed"))
++
++        db.syncDao().clear()
++        repo.snooze(
++            task.id,
++            Instant.parse("2026-09-23T10:00:00Z"),
++            ZoneOffset.UTC,
++        )
++        val snoozed = assertUpsert("tasks", task.id)
++        assertEquals(day, snoozed.getLong("due_day"))
++        assertEquals(660, snoozed.getInt("minute_of_day"))
++
++        db.syncDao().clear()
++        repo.delete(task.id)
++        assertDelete("tasks", task.id)
++    }
++
++    @Test
++    fun fullPayloadSnapshotCatchesSameVersionMutation() = runBlocking {
++        val task = TaskEntity(title = "Before", updatedAt = 1234L, createdAt = 1234L)
++        repo.create(task)
++        db.syncDao().clear()
++
++        // Deliberately keep the exact same updatedAt. Timestamp-only snapshots used to miss this.
++        db.tracked {
++            db.dao().editTask(
++                id = task.id,
++                title = "After",
++                notes = "",
++                listId = task.listId,
++                day = null,
++                minute = null,
++                priority = 0,
++                duration = null,
++                urgent = null,
++                important = null,
++                now = 1234L,
++            )
++        }
++
++        assertEquals("After", assertUpsert("tasks", task.id).getString("title"))
++    }
++
++    @Test
++    fun moveReorderListsTagsAndLinksUseTransactionalOutbox() = runBlocking {
++        val day = LocalDate.of(2026, 9, 23).toEpochDay()
++        val firstList = ListEntity(name = "A", sortOrder = 1)
++        val secondList = ListEntity(name = "B", sortOrder = 2)
++        repo.saveList(firstList)
++        assertEquals("A", assertUpsert("lists", firstList.id).getString("name"))
++        repo.saveList(secondList)
++        assertEquals("B", assertUpsert("lists", secondList.id).getString("name"))
++        val a = TaskEntity(title = "A", listId = firstList.id, dueDay = day, sortOrder = 1)
++        val b = TaskEntity(title = "B", listId = firstList.id, dueDay = day, sortOrder = 2)
++        repo.create(a)
++        repo.create(b)
++        db.syncDao().clear()
++
++        repo.reorderTask(b.id, a.id)
++        assertTrue(pending("tasks", a.id).isNotEmpty())
++        assertTrue(pending("tasks", b.id).isNotEmpty())
++
++        db.syncDao().clear()
++        repo.reorderList(secondList.id, firstList.id)
++        assertTrue(pending("lists", firstList.id).isNotEmpty())
++        assertTrue(pending("lists", secondList.id).isNotEmpty())
++
++        db.syncDao().clear()
++        repo.moveTask(a.id, secondList.id, RecurrenceScope.ONLY_THIS)
++        assertEquals(secondList.id, assertUpsert("tasks", a.id).getString("list_id"))
++
++        db.syncDao().clear()
++        repo.saveList(secondList.copy(name = "Renamed"))
++        assertEquals("Renamed", assertUpsert("lists", secondList.id).getString("name"))
++
++        val tagId = repo.saveTag("Cloud", 1)
++        assertEquals("Cloud", assertUpsert("tags", tagId).getString("name"))
++        db.syncDao().clear()
++        repo.edit(db.dao().task(a.id)!!, setOf(tagId))
++        assertUpsert("task_tags", OutboxRecorder.linkId(a.id, tagId))
++
++        db.syncDao().clear()
++        repo.edit(db.dao().task(a.id)!!, emptySet())
++        assertDelete("task_tags", OutboxRecorder.linkId(a.id, tagId))
++
++        db.syncDao().clear()
++        repo.saveTag("Cloud 2", 2, tagId)
++        assertEquals("Cloud 2", assertUpsert("tags", tagId).getString("name"))
++
++        // Re-link and delete the tag: both tag tombstone and cascaded link tombstone must survive.
++        repo.edit(db.dao().task(a.id)!!, setOf(tagId))
++        db.syncDao().clear()
++        repo.deleteTag(tagId)
++        assertDelete("tags", tagId)
++        assertDelete("task_tags", OutboxRecorder.linkId(a.id, tagId))
++
++        db.syncDao().clear()
++        repo.deleteList(secondList.id)
++        assertDelete("lists", secondList.id)
++        assertEquals(INBOX_ID, assertUpsert("tasks", a.id).getString("list_id"))
++    }
++
++    @Test
++    fun subtasksAndBothReorderPathsAreQueued() = runBlocking {
++        val task = TaskEntity(title = "Parent")
++        repo.create(task)
++        val a = SubtaskEntity(taskId = task.id, title = "A", sortOrder = 0)
++        val b = SubtaskEntity(taskId = task.id, title = "B", sortOrder = 1)
++        repo.saveSubtask(a)
++        assertEquals("A", assertUpsert("subtasks", a.id).getString("title"))
++        repo.saveSubtask(b)
++        assertEquals("B", assertUpsert("subtasks", b.id).getString("title"))
++        db.syncDao().clear()
++
++        repo.reorderSubtask(a.id, b.id, task.id, RecurrenceScope.ONLY_THIS)
++        assertTrue(pending("subtasks", a.id).isNotEmpty())
++        assertTrue(pending("subtasks", b.id).isNotEmpty())
++
++        db.syncDao().clear()
++        repo.moveSubtask(a.id, task.id, -1, RecurrenceScope.ONLY_THIS)
++        assertTrue(pending("subtasks", a.id).isNotEmpty() || pending("subtasks", b.id).isNotEmpty())
++
++        db.syncDao().clear()
++        repo.saveSubtask(a.copy(title = "A2", isCompleted = true))
++        val payload = assertUpsert("subtasks", a.id)
++        assertEquals("A2", payload.getString("title"))
++        assertTrue(payload.getBoolean("is_completed"))
++
++        db.syncDao().clear()
++        repo.deleteSubtask(a.id, task.id, RecurrenceScope.ONLY_THIS)
++        assertDelete("subtasks", a.id)
++    }
++
++    @Test
++    fun recurrenceTemplatesOccurrencesSplitScopesAndSeriesDeleteAreQueued() = runBlocking {
++        val day = LocalDate.of(2026, 9, 23).toEpochDay()
++        val rule = RecurrenceRule(Frequency.DAILY).encode()
++        val task = TaskEntity(title = "Series", dueDay = day, minuteOfDay = 600)
++        repo.create(task)
++        db.syncDao().clear()
++
++        val recurring =
++            repo.editRecurring(task, emptySet(), rule, RecurrenceScope.THIS_AND_FUTURE)
++        val seriesId = requireNotNull(recurring.seriesId)
++        val series = requireNotNull(db.dao().series(seriesId))
++        assertUpsert("recurring_series", seriesId)
++        assertUpsert("tasks", series.templateTaskId)
++        assertTrue(requireNotNull(db.dao().task(series.templateTaskId)).isTemplate)
++        assertUpsert("tasks", task.id)
++
++        db.syncDao().clear()
++        repo.editRecurring(
++            requireNotNull(db.dao().task(task.id)).copy(notes = "Only this"),
++            emptySet(),
++            rule,
++            RecurrenceScope.ONLY_THIS,
++        )
++        assertEquals("Only this", assertUpsert("tasks", task.id).getString("notes"))
++
++        db.syncDao().clear()
++        repo.complete(task.id, true)
++        val next =
++            repo.observe(TaskFilter(mode = "ALL", showCompleted = true), java.time.ZonedDateTime.now())
++                .first()
++                .single { !it.task.isCompleted }
++                .task
++        assertUpsert("tasks", task.id)
++        assertUpsert("tasks", next.id)
++
++        db.syncDao().clear()
++        repo.editRecurring(
++            next.copy(title = "Split"),
++            emptySet(),
++            rule,
++            RecurrenceScope.THIS_AND_FUTURE,
++        )
++        assertEquals("Split", assertUpsert("tasks", next.id).getString("title"))
++        assertTrue(db.syncDao().pending().any { it.entityType == "recurring_series" })
++
++        db.syncDao().clear()
++        repo.delete(next.id, RecurrenceScope.THIS_AND_FUTURE)
++        val deletedOccurrence = assertUpsert("tasks", next.id)
++        assertTrue(deletedOccurrence.getBoolean("is_skipped"))
++        assertTrue(db.syncDao().pending().any { it.entityType == "recurring_series" })
++    }
++
++    @Test
++    fun duplicationAndImageMetadataAreQueued() = runBlocking {
++        val task = TaskEntity(title = "Original")
++        val tag = repo.saveTag("T", 1)
++        repo.create(task, setOf(tag))
++        val subtask = SubtaskEntity(taskId = task.id, title = "Child")
++        repo.saveSubtask(subtask)
++        val image = TaskImage(taskId = task.id, fileName = "metadata.image")
++        repo.addImage(image)
++        db.syncDao().clear()
++
++        repo.duplicate(task.id)
++        val copies =
++            repo.observe(TaskFilter(mode = "ALL"), java.time.ZonedDateTime.now()).first()
++        val copy = copies.single { it.task.id != task.id }
++        assertUpsert("tasks", copy.task.id)
++        assertEquals(1, copy.subtasks.size)
++        assertTrue(pending("subtasks", copy.subtasks.single().id).isNotEmpty())
++        assertEquals(1, copy.images.size)
++        assertTrue(pending("task_images", copy.images.single().id).isNotEmpty())
++        assertTrue(pending("task_tags", OutboxRecorder.linkId(copy.task.id, tag)).isNotEmpty())
++
++        db.syncDao().clear()
++        val extra = TaskImage(taskId = task.id, fileName = "new.image")
++        repo.addImage(extra)
++        assertEquals("new.image", assertUpsert("task_images", extra.id).getString("file_name"))
++
++        db.syncDao().clear()
++        repo.removeImage(extra)
++        assertDelete("task_images", extra.id)
++    }
++
++    @Test
++    fun coalescingRetryAndCrashRollbackPreserveSemantics() = runBlocking {
++        val task = TaskEntity(title = "v1")
++        repo.create(task)
++        repo.edit(task.copy(title = "v2"), emptySet())
++        repo.edit(task.copy(title = "v3"), emptySet())
++        var row = single("tasks", task.id)
++        assertEquals(OutboxRecorder.UPSERT, row.operation)
++        assertEquals("v3", JSONObject(row.payload).getString("title"))
++        assertEquals(1, pending("tasks", task.id).size)
++
++        val firstOutboxId = row.id
++        db.syncDao().attempted(firstOutboxId, 100L)
++        db.syncDao().attempted(firstOutboxId, 200L)
++        row = single("tasks", task.id)
++        assertEquals(2, row.attemptCount)
++        assertEquals(200L, row.lastAttemptAt)
++        OutboxRecorder(db).enqueueAll()
++        row = single("tasks", task.id)
++        assertEquals(firstOutboxId, row.id)
++        assertEquals(2, row.attemptCount)
++        assertEquals(200L, row.lastAttemptAt)
++
++        repo.edit(task.copy(title = "v4"), emptySet())
++        row = single("tasks", task.id)
++        assertNotEquals(firstOutboxId, row.id)
++        assertEquals(0, row.attemptCount)
++        assertNull(row.lastAttemptAt)
++        assertEquals("v4", JSONObject(row.payload).getString("title"))
++
++        repo.delete(task.id)
++        assertDelete("tasks", task.id)
++        val tombstoneId = single("tasks", task.id).id
++        repo.saveTag("Unrelated", 3)
++        assertDelete("tasks", task.id)
++        assertEquals(tombstoneId, single("tasks", task.id).id)
++        OutboxRecorder(db).enqueueAll()
++        assertDelete("tasks", task.id)
++        assertEquals(tombstoneId, single("tasks", task.id).id)
++        assertEquals(1, pending("tasks", task.id).size)
++
++        db.syncDao().clear()
++        val doomed = TaskEntity(title = "Rollback")
++        try {
++            db.tracked {
++                db.dao().insertTask(doomed)
++                error("simulated process failure before transaction commit")
++            }
++            fail("transaction should have failed")
++        } catch (_: IllegalStateException) {}
++        assertNull(db.dao().task(doomed.id))
++        assertTrue(pending("tasks", doomed.id).isEmpty())
++
++        val committed = TaskEntity(title = "Commit")
++        db.tracked { db.dao().insertTask(committed) }
++        assertNotNull(db.dao().task(committed.id))
++        assertUpsert("tasks", committed.id)
++    }
++}
+diff --git a/app/src/main/java/com/example/pix/cloud/OutboxRecorder.kt b/app/src/main/java/com/example/pix/cloud/OutboxRecorder.kt
+index 0c339e5..3ffa0ed 100644
+--- a/app/src/main/java/com/example/pix/cloud/OutboxRecorder.kt
++++ b/app/src/main/java/com/example/pix/cloud/OutboxRecorder.kt
+@@ -3,60 +3,68 @@ package com.example.pix.cloud
+ import androidx.room.withTransaction
+ import com.example.pix.data.*
+ 
++/**
++ * Records the final cloud-visible state produced by a local Room mutation.
++ *
++ * This is deliberately a state-based outbox (`UPSERT` / `DELETE`) rather than a command log. Multiple
++ * local updates to the same entity are therefore coalesced to one final row. Replacing a queued row
++ * always uses a new outbox id so a sync already in flight can acknowledge only the snapshot it sent;
++ * a newer local mutation remains queued.
++ */
+ class OutboxRecorder(private val db: PixDatabase) {
+     private val dao = db.dao()
+     private val outbox = db.syncDao()
+ 
+     data class Snapshot(
+-        val lists: Map<String, Long>,
+-        val tags: Map<String, Long>,
+-        val tasks: Map<String, Long>,
+-        val subtasks: Map<String, Long>,
+-        val series: Map<String, Long>,
++        val lists: Map<String, ListEntity>,
++        val tags: Map<String, TagEntity>,
++        val tasks: Map<String, TaskEntity>,
++        val subtasks: Map<String, SubtaskEntity>,
++        val series: Map<String, RecurringSeriesEntity>,
+         val links: Set<String>,
+-        val images: Set<String>,
++        val images: Map<String, TaskImage>,
+     )
+ 
++    /**
++     * Compare complete cloud payloads, not only updatedAt stamps. This makes outbox capture robust to
++     * same-millisecond edits and prevents a forgotten timestamp bump from silently losing a mutation.
++     * Entity updatedAt is still part of the payload and remains the remote conflict version.
++     */
+     suspend fun snapshot(): Snapshot =
+         Snapshot(
+-            dao.listStamps().associate { it.id to it.updatedAt },
+-            dao.tagStamps().associate { it.id to it.updatedAt },
+-            dao.taskStamps().associate { it.id to it.updatedAt },
+-            dao.subtaskStamps().associate { it.id to it.updatedAt },
+-            dao.seriesStamps().associate { it.id to it.updatedAt },
+-            dao.tagLinks().map { linkId(it.taskId, it.tagId) }.toSet(),
+-            dao.imageIds().toSet(),
++            lists = dao.syncLists().associateBy { it.id },
++            tags = dao.syncTags().associateBy { it.id },
++            tasks = dao.syncTasks().associateBy { it.id },
++            subtasks = dao.syncSubtasks().associateBy { it.id },
++            series = dao.syncSeries().associateBy { it.id },
++            links = dao.tagLinks().map { linkId(it.taskId, it.tagId) }.toSet(),
++            images = dao.syncImages().associateBy { it.id },
+         )
+ 
+     suspend fun record(before: Snapshot) {
+         val after = snapshot()
+-        diff(before.lists, after.lists, "lists") { dao.listById(it)?.let(SyncCodec::list) }
+-        diff(before.tags, after.tags, "tags") { dao.tagById(it)?.let(SyncCodec::tag) }
+-        diff(before.tasks, after.tasks, "tasks") { dao.task(it)?.let(SyncCodec::task) }
+-        diff(before.subtasks, after.subtasks, "subtasks") {
+-            dao.subtaskById(it)?.let(SyncCodec::subtask)
+-        }
+-        diff(before.series, after.series, "recurring_series") {
+-            dao.series(it)?.let(SyncCodec::series)
+-        }
++        diff(before.lists, after.lists, "lists") { SyncCodec.list(it).toString() }
++        diff(before.tags, after.tags, "tags") { SyncCodec.tag(it).toString() }
++        diff(before.tasks, after.tasks, "tasks") { SyncCodec.task(it).toString() }
++        diff(before.subtasks, after.subtasks, "subtasks") { SyncCodec.subtask(it).toString() }
++        diff(before.series, after.series, "recurring_series") { SyncCodec.series(it).toString() }
++
++        val now = System.currentTimeMillis()
+         (after.links - before.links).forEach { id ->
+             val (taskId, tagId) = id.split('|', limit = 2)
+             enqueue(
+                 "task_tags",
+                 id,
+-                "UPSERT",
+-                SyncCodec.tagLink(TagLink(taskId, tagId), System.currentTimeMillis()).toString(),
++                UPSERT,
++                SyncCodec.tagLink(TagLink(taskId, tagId), now).toString(),
+             )
+         }
+-        (before.links - after.links).forEach { enqueue("task_tags", it, "DELETE", "{}") }
+-        (after.images - before.images).forEach { id ->
+-            dao.imageById(id)?.let { enqueue("task_images", id, "UPSERT", SyncCodec.image(it).toString()) }
+-        }
+-        (before.images - after.images).forEach { enqueue("task_images", it, "DELETE", "{}") }
++        (before.links - after.links).forEach { enqueue("task_tags", it, DELETE, "{}") }
++        diff(before.images, after.images, "task_images") { SyncCodec.image(it).toString() }
+     }
+ 
+     suspend fun enqueueAll() {
+-        record(
++        val empty =
+             Snapshot(
+                 emptyMap(),
+                 emptyMap(),
+@@ -64,42 +72,59 @@ class OutboxRecorder(private val db: PixDatabase) {
+                 emptyMap(),
+                 emptyMap(),
+                 emptySet(),
+-                emptySet(),
++                emptyMap(),
+             )
+-        )
++        if (db.inTransaction()) record(empty) else db.withTransaction { record(empty) }
+     }
+ 
+-    private suspend fun diff(
+-        before: Map<String, Long>,
+-        after: Map<String, Long>,
++    private suspend fun <T> diff(
++        before: Map<String, T>,
++        after: Map<String, T>,
+         type: String,
+-        payload: suspend (String) -> org.json.JSONObject?,
++        payload: (T) -> String,
+     ) {
+-        after.forEach { (id, stamp) ->
+-            if (before[id] != stamp) {
+-                payload(id)?.let { enqueue(type, id, "UPSERT", it.toString()) }
+-            }
++        after.forEach { (id, value) ->
++            if (before[id] != value) enqueue(type, id, UPSERT, payload(value))
+         }
+-        (before.keys - after.keys).forEach { enqueue(type, it, "DELETE", "{}") }
++        (before.keys - after.keys).forEach { enqueue(type, it, DELETE, "{}") }
+     }
+ 
+-    suspend fun enqueue(type: String, id: String, operation: String, payload: String) {
+-        if (operation == "DELETE") {
+-            outbox.removeMatching(type, id, "UPSERT")
+-        } else {
+-            outbox.removeMatching(type, id, "UPSERT")
+-            outbox.removeMatching(type, id, "DELETE")
++    /**
++     * Coalescing rule: keep exactly one pending final-state operation per entity identity.
++     *
++     * UPSERT -> UPSERT becomes the latest UPSERT. UPSERT -> DELETE becomes DELETE. DELETE -> UPSERT
++     * is allowed only when the entity truly exists again locally (for example an explicit recreation
++     * of the same UUID), in which case the final cloud state must be live again.
++     */
++    private suspend fun enqueue(type: String, id: String, operation: String, payload: String) {
++        require(operation == UPSERT || operation == DELETE)
++        val current = outbox.pendingFor(type, id).singleOrNull()
++        if (current?.operation == operation && current.payload == payload) {
++            // Same logical version: preserve id/retry metadata instead of manufacturing new work.
++            return
+         }
++        outbox.removeEntity(type, id)
+         outbox.insert(
+-            SyncOutboxEntity(entityType = type, entityId = id, operation = operation, payload = payload)
++            SyncOutboxEntity(
++                entityType = type,
++                entityId = id,
++                operation = operation,
++                payload = payload,
++            )
+         )
+     }
+ 
+     companion object {
++        const val UPSERT = "UPSERT"
++        const val DELETE = "DELETE"
++
+         fun linkId(taskId: String, tagId: String) = "$taskId|$tagId"
+     }
+ }
+ 
++/**
++ * Local cloud-relevant mutation boundary. Room data and its outbox delta commit or roll back together.
++ */
+ suspend fun <T> PixDatabase.tracked(block: suspend () -> T): T {
+     val recorder = OutboxRecorder(this)
+     return withTransaction {
+diff --git a/app/src/main/java/com/example/pix/cloud/SyncEngine.kt b/app/src/main/java/com/example/pix/cloud/SyncEngine.kt
+index c1397e3..da4758a 100644
+--- a/app/src/main/java/com/example/pix/cloud/SyncEngine.kt
++++ b/app/src/main/java/com/example/pix/cloud/SyncEngine.kt
+@@ -86,7 +86,7 @@ class SyncEngine(
+         val pending = db.syncDao().pending()
+         for (row in pending) {
+             try {
+-                if (row.operation == "DELETE") {
++                if (row.operation == OutboxRecorder.DELETE) {
+                     val parts = row.entityId.split('|', limit = 2)
+                     remote.tombstone(token, row.entityType, parts[0], parts.getOrNull(1))
+                 } else {
+@@ -151,9 +151,9 @@ class SyncEngine(
+             if (table == "task_tags") OutboxRecorder.linkId(row.getString("task_id"), row.getString("tag_id"))
+             else row.getString("id")
+         val pending = db.syncDao().pendingFor(table, id)
+-        val pendingDelete = pending.any { it.operation == "DELETE" }
++        val pendingDelete = pending.any { it.operation == OutboxRecorder.DELETE }
+         val pendingUpsert =
+-            pending.filter { it.operation == "UPSERT" }.maxOfOrNull {
++            pending.filter { it.operation == OutboxRecorder.UPSERT }.maxOfOrNull {
+                 runCatching { JSONObject(it.payload).optLong("updated_at") }.getOrDefault(0)
+             }
+         val localUpdated = localStamp(table, id)
+diff --git a/app/src/main/java/com/example/pix/data/BackupRepository.kt b/app/src/main/java/com/example/pix/data/BackupRepository.kt
+index 7a9b4ee..743ce27 100644
+--- a/app/src/main/java/com/example/pix/data/BackupRepository.kt
++++ b/app/src/main/java/com/example/pix/data/BackupRepository.kt
+@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
+ import androidx.room.Room
+ import androidx.room.withTransaction
+ import androidx.sqlite.db.SupportSQLiteDatabase
++import com.example.pix.cloud.tracked
+ import com.example.pix.domain.RecurrenceRule
+ import com.example.pix.domain.TaskRules
+ import com.example.pix.domain.TaskTiming
+@@ -213,7 +214,7 @@ class BackupRepository(private val context: Context, private val database: PixDa
+                         }
+                     row.put("fileName", name)
+                 }
+-                database.withTransaction {
++                database.tracked {
+                     val sql = database.openHelper.writableDatabase
+                     tables.asReversed().forEach { sql.execSQL("DELETE FROM $it") }
+                     insert(sql, all)
+diff --git a/app/src/main/java/com/example/pix/data/PixDatabase.kt b/app/src/main/java/com/example/pix/data/PixDatabase.kt
+index 2259c3d..188fc27 100644
+--- a/app/src/main/java/com/example/pix/data/PixDatabase.kt
++++ b/app/src/main/java/com/example/pix/data/PixDatabase.kt
+@@ -222,15 +222,19 @@ interface PixDao {
+ 
+     @Query("SELECT * FROM lists WHERE id=:id") suspend fun listById(id: String): ListEntity?
+ 
+-    @Query("SELECT id, updatedAt FROM lists") suspend fun listStamps(): List<IdStamp>
++    // Full cloud-visible snapshots used by the transactional outbox audit. Keeping these as bulk
++    // queries avoids N+1 reads on every local mutation while still detecting same-millisecond edits.
++    @Query("SELECT * FROM lists") suspend fun syncLists(): List<ListEntity>
+ 
+-    @Query("SELECT id, updatedAt FROM tags") suspend fun tagStamps(): List<IdStamp>
++    @Query("SELECT * FROM tags") suspend fun syncTags(): List<TagEntity>
+ 
+-    @Query("SELECT id, updatedAt FROM tasks") suspend fun taskStamps(): List<IdStamp>
++    @Query("SELECT * FROM tasks") suspend fun syncTasks(): List<TaskEntity>
+ 
+-    @Query("SELECT id, updatedAt FROM subtasks") suspend fun subtaskStamps(): List<IdStamp>
++    @Query("SELECT * FROM subtasks") suspend fun syncSubtasks(): List<SubtaskEntity>
+ 
+-    @Query("SELECT id, updatedAt FROM recurring_series") suspend fun seriesStamps(): List<IdStamp>
++    @Query("SELECT * FROM recurring_series") suspend fun syncSeries(): List<RecurringSeriesEntity>
++
++    @Query("SELECT * FROM task_images") suspend fun syncImages(): List<TaskImage>
+ 
+     @Query("SELECT * FROM tags WHERE id=:id") suspend fun tagById(id: String): TagEntity?
+ 
+@@ -241,8 +245,6 @@ interface PixDao {
+     @Query("SELECT taskId AS taskId, tagId AS tagId FROM task_tags")
+     suspend fun tagLinks(): List<TagLink>
+ 
+-    @Query("SELECT id FROM task_images") suspend fun imageIds(): List<String>
+-
+     @Query("SELECT COUNT(*) FROM tasks WHERE isTemplate=0 AND isSkipped=0")
+     suspend fun visibleTaskCount(): Int
+ 
+@@ -294,8 +296,8 @@ interface SyncDao {
+ 
+     @Query("DELETE FROM sync_outbox WHERE id=:id") suspend fun remove(id: String)
+ 
+-    @Query("DELETE FROM sync_outbox WHERE entityType=:type AND entityId=:id AND operation=:op")
+-    suspend fun removeMatching(type: String, id: String, op: String)
++    @Query("DELETE FROM sync_outbox WHERE entityType=:type AND entityId=:id")
++    suspend fun removeEntity(type: String, id: String)
+ 
+     @Query("UPDATE sync_outbox SET attemptCount=attemptCount+1, lastAttemptAt=:now WHERE id=:id")
+     suspend fun attempted(id: String, now: Long)
+diff --git a/app/src/main/java/com/example/pix/data/SyncEntities.kt b/app/src/main/java/com/example/pix/data/SyncEntities.kt
+index aaea356..a0f9ed6 100644
+--- a/app/src/main/java/com/example/pix/data/SyncEntities.kt
++++ b/app/src/main/java/com/example/pix/data/SyncEntities.kt
+@@ -2,6 +2,10 @@ package com.example.pix.data
+ 
+ import androidx.room.*
+ 
++/**
++ * Persistent local final-state mutation. `createdAt` orders queue versions; the entity conflict
++ * version remains the `updated_at` carried inside UPSERT payloads.
++ */
+ @Entity(tableName = "sync_outbox", indices = [Index("entityType", "entityId")])
+ data class SyncOutboxEntity(
+     @PrimaryKey val id: String = newId(),
+@@ -69,6 +73,4 @@ data class GoogleSyncStateEntity(
+     val lastSyncAt: Long = 0,
+ )
+ 
+-data class IdStamp(val id: String, val updatedAt: Long)
+-
+ data class TagLink(val taskId: String, val tagId: String)
+diff --git a/app/src/main/java/com/example/pix/data/TaskRepository.kt b/app/src/main/java/com/example/pix/data/TaskRepository.kt
+index 72bf0e1..f646a96 100644
+--- a/app/src/main/java/com/example/pix/data/TaskRepository.kt
++++ b/app/src/main/java/com/example/pix/data/TaskRepository.kt
+@@ -344,8 +344,11 @@ class TaskRepository(
+             val target = index + direction
+             if (index >= 0 && target in rows.indices) {
+                 java.util.Collections.swap(rows, index, target)
++                val now = System.currentTimeMillis()
+                 rows.forEachIndexed { order, row ->
+-                    dao.saveSubtask(row.copy(sortOrder = order.toLong()))
++                    dao.saveSubtask(
++                        row.copy(sortOrder = order.toLong(), updatedAt = now)
++                    )
+                 }
+                 recurrence.refreshSubtaskTemplate(taskId, scope)
+             }
+diff --git a/docs/IMPLEMENTATION_STATUS.md b/docs/IMPLEMENTATION_STATUS.md
+index be4a0d3..f893bc6 100644
+--- a/docs/IMPLEMENTATION_STATUS.md
++++ b/docs/IMPLEMENTATION_STATUS.md
+@@ -1,4 +1,21 @@
+-# Stato implementazione — iterazione 9 (widget calendario settimanale)
++# Stato implementazione — iterazione 10 (outbox transazionale)
++
++Questa iterazione hardena il boundary offline-first: ogni mutazione locale cloud-relevant passa da una transazione Room che comprende sia lo stato applicativo sia la relativa outbox. Il protocollo remoto `UPSERT`/`DELETE` non è stato riscritto.
++
++| Funzionalità | Stato | Dettagli |
++|---|---|---|
++| Outbox atomica | IMPLEMENTED | `TaskRepository.mutate` usa `PixDatabase.tracked`; dato Room + delta outbox fanno commit/rollback insieme. Anche restore backup ed enqueue-all legacy/recovery sono transazionali. |
++| Rilevazione mutazioni | IMPLEMENTED | Snapshot cloud-visible completo con query bulk, non più solo `updatedAt`; copre same-millisecond edit e protegge da timestamp bump dimenticati. |
++| Coalescing / retry | IMPLEMENTED | Una final-state op per identità; UPSERT→DELETE conserva il tombstone; nuova mutazione usa un nuovo outbox id e resetta i retry della nuova versione senza permettere a un ack in volo di cancellarla. |
++| Riordino sottotask | IMPLEMENTED | Corretto `moveSubtask`: il cambio `sortOrder` aggiorna anche `updatedAt`. |
++| Notification/widget actions | IMPLEMENTED | Completa/Posticipa da notifica e complete da widget transitano dal medesimo `TaskRepository`. Nessun DAO write cloud-relevant diretto da ViewModel/Receiver. |
++| Test outbox | PARTIAL | Aggiunta suite instrumented per CRUD, undo, snooze, reorder, link tag, sottotask, ricorrenze/template/split, immagini, retry, coalescing e rollback. Esecuzione bloccata nel sandbox perché Gradle 9.5.0 non è scaricabile senza rete. |
++
++Dettaglio dell'audit in `docs/OUTBOX_AUDIT.md`.
++
++---
++
++## Iterazione 9 (widget calendario settimanale)
+ 
+ Questa iterazione aggiunge un secondo Home Screen Widget Glance per la settimana, mantenendo il Task Widget esistente e condividendone tema, azioni e aggiornamento Room senza introdurre nuove tabelle.
+ 
+@@ -94,7 +111,7 @@ I font sono inclusi con licenze OFL. Niente nuove librerie per UI calendario o D
+ - Senza autorizzazione notifiche non viene emesso alcun promemoria; la UI lo segnala. Senza accesso exact alarms la consegna può essere ritardata da Android.
+ - Force-stop manuale dell’app e restrizioni aggressive del produttore possono impedire l’esecuzione in background fino alla riapertura.
+ - Posticipa arrotonda al minuto successivo: almeno 60 minuti, al massimo 60 minuti e 59 secondi; il modello task conserva precisione al minuto.
+-- Le modifiche locali non sono ancora gestite tramite outbox transazionale: dopo crash fra commit Room e richiesta worker, la riconciliazione all’avvio/periodica recupera gli allarmi.
++- Le mutazioni locali cloud-relevant sono protette da outbox transazionale Room; restano da validare su device/CI i test instrumented completi e gli scenari di kill reale del processo.
+ - Ricevuta scritta dopo pubblicazione: un crash in quel brevissimo intervallo può ripubblicare la stessa notifica (stessa identità, onlyAlertOnce).
+ - La ricerca Unicode usa il comportamento LIKE di SQLite; la deduplicazione tag è invece Unicode NFC/Locale.ROOT.
+ - Il debounce non garantisce il salvataggio degli ultimissimi caratteri in caso di uccisione forzata immediata del processo.
+diff --git a/patch_new/docs/OUTBOX_AUDIT.md b/docs/OUTBOX_AUDIT.md
+new file mode 100644
+index 0000000..b30e6a7
+--- /dev/null
++++ b/docs/OUTBOX_AUDIT.md
+@@ -0,0 +1,123 @@
++# Audit outbox transazionale — iterazione 10
++
++## Obiettivo
++
++Per ogni mutazione locale che modifica lo stato P©ix sincronizzabile, lo stato Room e la relativa
++operazione `sync_outbox` devono essere parte della stessa transazione Room. Il protocollo remoto non
++è stato modificato: l'outbox resta **state-based** e usa `UPSERT` / `DELETE`.
++
++## Boundary transazionale
++
++`TaskRepository.mutate { ... }` esegue le mutazioni locali dentro `PixDatabase.tracked { ... }`.
++`tracked` usa `RoomDatabase.withTransaction`: snapshot iniziale, mutazione Room e aggiornamento outbox
++sono quindi commit/rollback atomici.
++
++`BackupRepository.restore` usa ora lo stesso boundary perché un restore sostitutivo cambia stato
++cloud-relevant. `OutboxRecorder.enqueueAll()` è a sua volta transazionale quando viene invocato fuori
++da una transazione, così l'enqueue iniziale di dati legacy/recovery non può restare parziale.
++
++## Rilevazione delle mutazioni
++
++Prima dell'audit lo snapshot confrontava solo `updatedAt`. Questo aveva due fragilità:
++
++1. due modifiche nello stesso millisecondo potevano avere lo stesso timestamp;
++2. una mutazione che dimenticava di incrementare `updatedAt` poteva cambiare Room senza produrre
++   alcuna voce outbox.
++
++Ora lo snapshot confronta l'intera rappresentazione cloud-visible delle entità Room, caricata con
++query bulk (`lists`, `tags`, `tasks`, `subtasks`, `recurring_series`, `task_images`) più il set
++`task_tags`. `updatedAt` resta nel payload come versione usata dal conflitto remoto, ma non è più
++l'unico meccanismo che decide se registrare una mutazione.
++
++Il bug concreto trovato nel riordino `moveSubtask` è stato corretto: il cambio `sortOrder` aggiorna
++anche `updatedAt`.
++
++## Coalescing e retry
++
++Per ogni coppia `(entityType, entityId)` viene mantenuta una sola operazione finale pendente:
++
++- `UPSERT -> UPSERT`: resta l'ultimo stato completo;
++- `UPSERT -> DELETE`: resta `DELETE`;
++- `DELETE -> UPSERT`: è ammesso solo se la stessa identità esiste nuovamente nello stato locale
++  finale (ricreazione esplicita); in questo caso il cloud deve tornare ad avere la riga viva.
++
++La sostituzione della voce usa **un nuovo `outbox.id`**. Questo è importante durante un push in volo:
++la conferma della vecchia richiesta può cancellare solo il vecchio id e non può rimuovere una
++mutazione locale più recente accodata nel frattempo.
++
++`attemptCount` e `lastAttemptAt` restano associati alla specifica versione pendente. Un enqueue della
++stessa identica operazione/payload conserva id e retry metadata; una vera nuova mutazione sostituisce
++la vecchia operazione e riparte correttamente da `attemptCount = 0`.
++
++## Matrice delle mutazioni verificate
++
++| Area | API locale | Entità outbox attese | Esito audit |
++|---|---|---|---|
++| Creazione task | `TaskRepository.create` | `tasks`, eventuali `task_tags` | Transazionale |
++| Modifica task | `edit` | `tasks`, delta `task_tags` | Transazionale |
++| Completamento / undo | `complete` | `tasks` + eventuale nuova occorrenza/relazioni | Transazionale |
++| Snooze | `snooze` | `tasks` | Transazionale |
++| Delete task | `delete` | `tasks DELETE` + cascade relazioni; per ricorrenze stato serie/skip | Transazionale |
++| Duplicazione | `duplicate` | task, sottotask, tag-link, immagini; eventuale serie | Transazionale |
++| Spostamento lista | `moveTask` | `tasks` | Transazionale |
++| Riordino task | `reorderTask` | tutti i task con `sortOrder` cambiato | Transazionale |
++| CRUD liste | `saveList`, `deleteList` | `lists`; task spostati in Inbox | Transazionale |
++| Riordino liste | `reorderList` | liste con `sortOrder` cambiato | Transazionale |
++| CRUD tag | `saveTag`, `deleteTag` | `tags`, link rimossi in cascade | Transazionale |
++| Task-tag link/unlink | `create` / `edit` | `task_tags UPSERT/DELETE` | Transazionale |
++| CRUD sottotask | `saveSubtask`, `deleteSubtask` | `subtasks` | Transazionale |
++| Riordino sottotask | `reorderSubtask`, `moveSubtask` | sottotask con ordine cambiato | Transazionale; timestamp fix applicato |
++| Ricorrenze | `editRecurring`, `complete`, `delete` | task/occorrenze/template, `recurring_series`, relazioni | Transazionale |
++| Creazione occorrenza | `RecurrenceStore.advance` via repository | nuova `tasks` + relazioni | Transazionale |
++| Split serie | `RecurrenceStore.configure/cut` via repository | vecchia/nuova serie, template, occorrenze | Transazionale |
++| Solo questa | `editRecurring(...ONLY_THIS)` | task corrente + delta relazioni | Transazionale |
++| Questa e successive | `editRecurring(...THIS_AND_FUTURE)` | serie/template/task coinvolti | Transazionale |
++| Delete serie/futuro | `delete(...THIS_AND_FUTURE)` | cutoff serie + occorrenza skipped + eventuali delete future | Transazionale |
++| Template ricorrenza | interno a `RecurrenceStore` | template come `tasks` con `is_template=true` | Transazionale |
++| Durata | `edit` / `postponeTask` | payload `tasks.duration_minutes` | Transazionale |
++| Matrice | `edit` | payload `matrix_urgent`, `matrix_important` | Transazionale |
++| Task image metadata | `addImage`, `removeImage`, duplicate/recurrence | `task_images` | Transazionale |
++| Restore backup | `BackupRepository.restore` | delta completo finale | Transazionale |
++| Azioni notifica | `ReminderEngine.act` | usa `TaskRepository.complete/snooze` | Stesso percorso transazionale |
++| Azioni widget | `CompleteTaskAction` | usa `TaskRepository.complete` | Stesso percorso transazionale |
++
++## Bypass DAO intenzionali
++
++L'audit statico non trova scritture DAO cloud-relevant da ViewModel o BroadcastReceiver. Restano
++scritture dirette solo nei boundary che **non devono** creare una nuova mutazione locale da rimandare
++al server:
++
++- `SyncEngine`: applica pull remoto; riaccodarlo produrrebbe echo-loop;
++- `AccountStore.wipeUserData`: svuota la cache Room durante logout/cambio account e cancella anche
++  outbox/stato sync; non rappresenta una cancellazione cloud;
++- `ReminderEngine`: salva `reminder_receipts`, stato esclusivamente locale;
++- `GoogleCalendarRepository`: mantiene una cache read-only di dati Google, fuori dal protocollo Pcix;
++- recovery account: ripristina esplicitamente anche la relativa outbox salvata.
++
++`RecurrenceStore` contiene scritture DAO, ma è `internal` e viene invocato dal `TaskRepository` dentro
++la transazione `mutate`.
++
++## Test aggiunti / estesi
++
++`TransactionalOutboxAuditTest` copre:
++
++- task CRUD, completion, undo, snooze, durata e matrice;
++- liste, spostamento e riordini;
++- tag e task-tag link/unlink;
++- sottotask e due percorsi di riordino;
++- ricorrenze, template, nuova occorrenza, split e scope;
++- duplicazione e metadata immagini;
++- coalescing, retry counter e sostituzione della versione pendente;
++- rollback atomico simulando un errore prima del commit;
++- commit riuscito con presenza simultanea di dato + outbox;
++- modifica con `updatedAt` volutamente invariato, per impedire regressioni al vecchio rilevatore.
++
++`ReminderEngineTest` verifica inoltre che le azioni notifica Snooze/Completa producano la stessa
++outbox transazionale del repository.
++
++## Verifica build
++
++Nel sandbox corrente Java 21 è disponibile, ma `./gradlew` non può scaricare la distribuzione
++Gradle 9.5.0 da `services.gradle.org` perché l'accesso di rete è disabilitato. Sono stati eseguiti
++`git diff --check`, audit statici dei call-site e controlli strutturali dei file modificati. Build e
++test instrumented devono essere rieseguiti in Android Studio / CI con Gradle 9.5.0 e Android SDK.
+diff --git a/docs/SYNC_ARCHITECTURE.md b/docs/SYNC_ARCHITECTURE.md
+index ee3cddb..e111d44 100644
+--- a/docs/SYNC_ARCHITECTURE.md
++++ b/docs/SYNC_ARCHITECTURE.md
+@@ -23,7 +23,7 @@ Senza URL/anon key la Home locale resta usabile: niente login finto.
+ ## Scrittura offline
+ 
+ 1. Mutazione Room.
+-2. Diff snapshot nella stessa transazione → `UPSERT` / `DELETE` in outbox (coalescing per id).
++2. Diff dello snapshot cloud-visible completo nella stessa transazione → `UPSERT` / `DELETE` in outbox (coalescing per identità). Il confronto non dipende soltanto da `updatedAt`, quindi cattura anche edit nello stesso millisecondo.
+ 3. UI via Flow.
+ 4. `cloud-sync` WorkManager con rete e backoff.
+ 
+diff --git a/docs/VERIFICATION.md b/docs/VERIFICATION.md
+index 5004787..975aa63 100644
+--- a/docs/VERIFICATION.md
++++ b/docs/VERIFICATION.md
+@@ -47,3 +47,13 @@ Il ZIP non è cifrato. Usare la destinazione scelta nel selettore documenti Andr
+ La condivisione è gestita dall’app destinataria: alcune app possono ignorare il testo quando ricevono immagini. Nessuna compatibilità di importazione con formati di terze parti promessa.
+ Serif e Monospazio usano famiglie locali Android; lo standard mantiene Inter/Manrope. Dimensioni 88%, 100%, 115%, moltiplicate per la scala di sistema. Logo, emoji e selettori nativi Android restano indipendenti dalla tipografia interna.
+ Audit TalkBack, API26/33 e dispositivi fisici ancora aperto.
++
++## Iterazione 10 — outbox transazionale
++
++- `git diff --check`: PASS.
++- Audit statico ViewModel/Receiver: nessuna scrittura DAO cloud-relevant diretta; notification e widget actions usano `TaskRepository`.
++- Audit mutation surface: task/list/tag/task-tag/subtask/recurrence/template/duration/matrix/task_images coperti dal boundary `tracked`.
++- Corretto il riordino `moveSubtask` per aggiornare `updatedAt`.
++- Aggiunti `TransactionalOutboxAuditTest` e test delle azioni notification → outbox.
++- `./gradlew testDebugUnitTest --no-daemon`: BLOCKED prima dell’esecuzione dei task; il wrapper richiede Gradle 9.5.0 e il sandbox non può raggiungere `services.gradle.org` (`UnknownHostException`).
++- Android instrumented tests/device: NOT RUN nello stesso ambiente.

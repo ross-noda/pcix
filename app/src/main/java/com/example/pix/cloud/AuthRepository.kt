@@ -298,19 +298,19 @@ class AuthRepository internal constructor(
 
     suspend fun refreshIfNeeded() = accessToken()
 
-    /** Called after a protected API returned 401. A failed forced refresh invalidates the session. */
+    /**
+     * Called after a protected API returned 401. A refresh token rejected by Auth invalidates the
+     * session; a network/server failure while refreshing is only Offline and must not sign the user
+     * out. IOException is intentionally propagated so SyncEngine can persist Offline.
+     */
     suspend fun recoverFromUnauthorized(): String? =
         mutex.withLock {
             val stored = store.read() ?: run {
                 invalidateLocked()
                 return null
             }
-            return try {
-                refreshLocked(stored)?.accessToken ?: run {
-                    invalidateLocked()
-                    null
-                }
-            } catch (_: IOException) {
+            val refreshed = refreshLocked(stored)
+            refreshed?.accessToken ?: run {
                 invalidateLocked()
                 null
             }

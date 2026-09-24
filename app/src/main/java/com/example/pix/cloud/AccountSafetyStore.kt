@@ -5,6 +5,7 @@ import com.example.pix.data.BackupRepository
 import com.example.pix.data.PixDatabase
 import com.example.pix.data.SyncOutboxEntity
 import com.example.pix.data.SyncStateEntity
+import com.example.pix.data.SyncEntityVersionEntity
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
@@ -32,10 +33,12 @@ class AccountSafetyStore(
             File(temp, "data.zip").outputStream().buffered().use { backups.export(it) }
             val pending = db.syncDao().pending()
             val states = db.syncDao().states()
+            val versions = db.syncDao().versions(ownerId)
             val sync = JSONObject()
                 .put("owner", ownerId)
                 .put("outbox", JSONArray().apply { pending.forEach { put(it.toJson()) } })
                 .put("state", JSONArray().apply { states.forEach { put(it.toJson()) } })
+                .put("versions", JSONArray().apply { versions.forEach { put(it.toJson()) } })
             File(temp, "sync.json").writeText(sync.toString())
             File(temp, "complete").writeText("1")
             if (target.exists()) target.deleteRecursively()
@@ -59,8 +62,10 @@ class AccountSafetyStore(
         require(sync.getString("owner") == ownerId)
         db.syncDao().clear()
         db.syncDao().clearState()
+        db.syncDao().clearAllVersions()
         sync.getJSONArray("outbox").objects().forEach { db.syncDao().insert(it.toOutbox()) }
         sync.getJSONArray("state").objects().forEach { db.syncDao().saveState(it.toState()) }
+        sync.optJSONArray("versions")?.objects()?.forEach { db.syncDao().saveVersion(it.toVersion()) }
         // Backup restore may rename local image files. Re-enqueue current entities so UPSERT
         // payloads exactly describe the restored Room state; DELETE rows remain preserved.
         OutboxRecorder(db).enqueueAll()
@@ -95,6 +100,14 @@ class AccountSafetyStore(
         .put("accountId", accountId)
         .put("checkpoint", checkpoint ?: JSONObject.NULL)
         .put("lastSuccessAt", lastSuccessAt)
+        .put("status", status)
+
+    private fun SyncEntityVersionEntity.toJson() = JSONObject()
+        .put("accountId", accountId)
+        .put("entityType", entityType)
+        .put("entityId", entityId)
+        .put("serverVersion", serverVersion)
+        .put("deleted", deleted)
 
     private fun JSONObject.toOutbox() = SyncOutboxEntity(
         id = getString("id"),
@@ -111,6 +124,15 @@ class AccountSafetyStore(
         accountId = getString("accountId"),
         checkpoint = if (isNull("checkpoint")) null else getString("checkpoint"),
         lastSuccessAt = getLong("lastSuccessAt"),
+        status = optString("status", "Idle"),
+    )
+
+    private fun JSONObject.toVersion() = SyncEntityVersionEntity(
+        accountId = getString("accountId"),
+        entityType = getString("entityType"),
+        entityId = getString("entityId"),
+        serverVersion = getLong("serverVersion"),
+        deleted = optBoolean("deleted", false),
     )
 
     private fun JSONArray.objects(): Sequence<JSONObject> =

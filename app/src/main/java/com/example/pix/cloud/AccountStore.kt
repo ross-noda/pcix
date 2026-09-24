@@ -81,6 +81,7 @@ class AccountStore(private val context: Context, private val db: PixDatabase) : 
             db.dao().clearLists()
             db.syncDao().clear()
             db.syncDao().clearState()
+            db.syncDao().clearAllVersions()
             db.dao().insertList(ListEntity(id = INBOX_ID, name = "Inbox", color = 8, sortOrder = 0))
         }
         ReminderWork.reconcile(context)

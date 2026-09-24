@@ -106,8 +106,18 @@ class BackupRepositoryTest {
         assertEquals(2, prepared.tasks)
         assertEquals(2, prepared.lists)
         assertEquals(1, prepared.tags)
+        db.syncDao().clear()
         backups.restore(prepared)
         assertNull(repo.details(extra.id))
+        assertEquals(
+            "DELETE",
+            db.syncDao().pendingFor("tasks", extra.id).single().operation,
+        )
+        assertTrue(
+            db.syncDao().pending().any {
+                it.entityType == "task_images" && it.operation == "UPSERT"
+            }
+        )
         val result = repo.details(task.id)!!
         assertEquals(2880, result.task.durationMinutes)
         assertTrue(result.task.isCompleted)
