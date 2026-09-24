@@ -31,9 +31,8 @@ class PixApplication : Application() {
             signOutLocal = { auth.signOut() },
             deleteRemote = { auth.deleteAccount() },
             beforeLocalClear = {
+                // Pcix account lifecycle is intentionally independent from Google Calendar.
                 CloudSyncWork.cancel(this)
-                GoogleCalendarWork.cancel(this)
-                runCatching { google.disconnect(null) }
             },
         )
     }

@@ -42,7 +42,6 @@ class AccountLifecycleManager(
             beforeLocalClear()
             signOutLocal()
             accounts.wipeUserData()
-            accounts.clearGoogle()
             accounts.setOwner(null)
             LogoutOutcome.Completed
         } catch (error: Throwable) {
@@ -62,7 +61,6 @@ class AccountLifecycleManager(
             beforeLocalClear()
             signOutLocal()
             accounts.wipeUserData()
-            accounts.clearGoogle()
             accounts.setOwner(null)
             if (owner != null) accounts.deleteProtected(owner)
             DeleteOutcome.Completed

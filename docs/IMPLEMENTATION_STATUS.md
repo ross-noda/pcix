@@ -1,3 +1,19 @@
+# Stato implementazione — iterazione 12 (Google Calendar foundation hardening)
+
+Questa iterazione mette in sicurezza l’integrazione Google Calendar senza ampliare la UI: autorizzazione Google separata dalla sessione Pcix, cache attribuita esplicitamente all’account Google, identità evento robusta e worker non interattivo.
+
+| Funzionalità | Stato | Dettagli |
+|---|---|---|
+| Google Identity authorization | IMPLEMENTED | `AuthorizationClient` viene interrogato per un token corrente; Pcix non persiste più access token Google né scadenze artificiali. Le vecchie chiavi token vengono eliminate all’avvio del repository. |
+| Account Google esplicito | IMPLEMENTED | Nuova `GoogleCalendarAccountEntity` con `sub` Google stabile + email; calendari, eventi e sync token sono legati a `accountId`. Nessuna inferenza dell’account dal `calendarId`. |
+| Identità eventi | IMPLEMENTED | `google_events` usa PK `(accountId, calendarId, eventId)`; le istanze ricorrenti conservano anche `recurringEventId` e `originalStartTime` normalizzato. Le chiavi UI includono account/calendario/evento. |
+| Room v8 | IMPLEMENTED | Nuova migration `7→8`; v6 e `6→7` non sono state alterate. La cache Google legacy priva di ownership viene scartata intenzionalmente durante l’upgrade, senza toccare dati Pcix/cloud. |
+| Disconnect Calendar | IMPLEMENTED | Revoca best-effort dei soli scope Calendar per l’account Google collegato, poi rimozione della cache Google. Logout/delete/switch dell’account Pcix non invocano più alcuna pulizia Google. |
+| Worker Calendar | IMPLEMENTED | Nessun flusso interattivo in background. Autorizzazione assente/scaduta → `NeedsReconnect`/“Da ricollegare” e `Result.success()`; retry WorkManager resta riservato agli errori tecnici con backoff. |
+| Test foundation | PARTIAL | Aggiunti test per account ownership, stesso `eventId` su calendari diversi, disconnect/isolation, reconnect e sync background senza autorizzazione, oltre a parser ricorrenze e migration. Esecuzione Gradle nel sandbox ancora bloccata dal download della distribuzione Gradle 9.5.0. |
+
+---
+
 # Stato implementazione — iterazione 10 (outbox transazionale)
 
 Questa iterazione hardena il boundary offline-first: ogni mutazione locale cloud-relevant passa da una transazione Room che comprende sia lo stato applicativo sia la relativa outbox. Il protocollo remoto `UPSERT`/`DELETE` non è stato riscritto.

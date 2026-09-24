@@ -74,7 +74,6 @@ class SessionCoordinator internal constructor(
                         accounts.protect(owner)
                         val restored = accounts.restoreProtected(userId)
                         if (!restored) accounts.wipeUserData()
-                        accounts.clearGoogle()
                         accounts.setOwner(userId)
                         publishReadyIfCurrent(user)
                     }

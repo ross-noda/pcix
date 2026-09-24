@@ -12,8 +12,11 @@ class GoogleCalendarSyncWorker(context: Context, params: WorkerParameters) :
     override suspend fun doWork(): Result {
         val app = applicationContext as? PixApplication ?: return Result.success()
         return try {
-            app.google.synchronize()
-            Result.success()
+            when (app.google.synchronize()) {
+                GoogleCalendarRepository.SyncOutcome.Synced,
+                GoogleCalendarRepository.SyncOutcome.NotConnected,
+                GoogleCalendarRepository.SyncOutcome.NeedsReconnect -> Result.success()
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

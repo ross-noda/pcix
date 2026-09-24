@@ -453,7 +453,6 @@ class SessionCoordinatorGateTest {
                     return false
                 }
                 override suspend fun wipeUserData() = Unit
-                override suspend fun clearGoogle() = Unit
             }
         val coordinator =
             SessionCoordinator(auth, accounts, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
@@ -485,7 +484,6 @@ class SessionCoordinatorGateTest {
                     wipeStarted.complete(Unit)
                     allowWipe.await()
                 }
-                override suspend fun clearGoogle() = Unit
             }
         val coordinator =
             SessionCoordinator(auth, accounts, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
@@ -514,7 +512,6 @@ class SessionCoordinatorGateTest {
                 override fun setOwner(id: String?) { owner = id; events += "owner:$id" }
                 override suspend fun hasLegacyData() = false
                 override suspend fun wipeUserData() { events += "wipe" }
-                override suspend fun clearGoogle() { events += "google" }
                 override suspend fun protect(ownerId: String) { events += "protect:$ownerId" }
                 override suspend fun restoreProtected(ownerId: String): Boolean {
                     events += "restore:$ownerId"
@@ -526,7 +523,7 @@ class SessionCoordinatorGateTest {
 
         coordinator.afterLogin("B")
 
-        assertEquals(listOf("protect:A", "restore:B", "google", "owner:B"), events)
+        assertEquals(listOf("protect:A", "restore:B", "owner:B"), events)
         assertEquals("B", owner)
         assertTrue(coordinator.state.value is AccountSessionState.Ready)
     }
@@ -546,7 +543,6 @@ class SessionCoordinatorGateTest {
                     wipeStarted.complete(Unit)
                     allowWipe.await()
                 }
-                override suspend fun clearGoogle() = Unit
             }
         val coordinator =
             SessionCoordinator(auth, accounts, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))

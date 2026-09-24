@@ -94,3 +94,29 @@ Audit TalkBack, API26/33 e dispositivi fisici ancora aperto.
 ### Verifica esterna necessaria
 
 Applicare `0002_sync_protocol_v2.sql` a un progetto Supabase di test e lanciare almeno una prova reale con due account/device/client contro PostgREST. La logica SQL è stata auditata staticamente qui, ma il sandbox non dispone di un PostgreSQL/Supabase locale né delle credenziali del progetto remoto.
+
+
+## Iterazione 12 — Google Calendar foundation hardening, 24 settembre 2026
+
+### Audit/correzioni statiche
+
+- Rimossa la persistenza del bearer token Google (`access`) e della scadenza artificiale (`accessExpires`); le chiavi legacy vengono cancellate dal repository.
+- Nuovo gateway `AuthorizationClient`: le operazioni foreground possono restituire una resolution interattiva; il worker richiede autorizzazione silenziosa per l’account noto e non lancia mai UI.
+- Stato autorizzazione invalida: `NeedsReconnect`, esposto alla UI tramite la stringa esistente “Da ricollegare”; il worker restituisce successo per evitare retry aggressivi.
+- Account Google esplicito in Room (`google_calendar_accounts`), identificato da `sub` OIDC e con email separata; calendari/eventi/sync state referenziano `accountId`.
+- `google_events`: PK `(accountId, calendarId, eventId)`; aggiunti `originalStartDay`/`originalStartMinute` per preservare l’identità logica delle istanze ricorrenti spostate.
+- Migration Room `7→8` aggiunta senza modificare v6 o `6→7`. La cache Google precedente viene eliminata perché non contiene ownership affidabile; task/liste/tag/outbox/sync Pcix non vengono toccati.
+- Disconnect Google Calendar revoca i soli scope Calendar e poi cancella soltanto la cache Google. Rimossa ogni chiamata di pulizia Calendar da logout, delete-account e cambio account Pcix; rimosso `clearGoogle()` dal boundary `AccountDataStore`.
+- `git diff --check`: PASS.
+
+### Test aggiunti/estesi
+
+- `GoogleCalendarFoundationTest`: account Google associato, stesso `eventId` su due calendari, disconnect + isolamento dati Pcix, worker-path senza autorizzazione valida, reconnect silenzioso.
+- `GoogleEventParserTest`: ownership account/calendario e `originalStartTime` di istanza ricorrente.
+- `MigrationTest`: target Room v8 e reset sicuro della cache Calendar legacy durante la catena di migrazione.
+- Test lifecycle Pcix aggiornati per verificare che logout/cambio account non producano più side effect Google.
+
+### Build/test nel sandbox
+
+- `./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon`: **BLOCKED prima della configurazione del progetto**. Il wrapper tenta di scaricare Gradle 9.5.0 ma il sandbox non risolve `services.gradle.org` (`UnknownHostException`). È stato tentato anche il recupero separato della distribuzione, non disponibile nel runtime. Nessun task Kotlin/Room è quindi partito.
+- Test Android instrumented: richiedono toolchain Gradle disponibile e poi emulator/device.

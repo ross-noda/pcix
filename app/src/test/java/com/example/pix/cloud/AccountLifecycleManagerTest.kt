@@ -10,7 +10,7 @@ class AccountLifecycleManagerTest {
         val store = FakeAccountStore(owner = "A", pending = 2)
         val manager = manager(store, sync = true)
         assertEquals(LogoutOutcome.Completed, manager.logout())
-        assertEquals(listOf("protect:A", "clear", "google", "owner:null"), store.events)
+        assertEquals(listOf("protect:A", "clear", "owner:null"), store.events)
         assertTrue(store.signedOut)
     }
 
@@ -91,7 +91,6 @@ private class FakeAccountStore(
     override fun setOwner(id: String?) { owner = id; events += "owner:$id" }
     override suspend fun hasLegacyData() = false
     override suspend fun wipeUserData() { cleared = true; events += "clear" }
-    override suspend fun clearGoogle() { events += "google" }
     override suspend fun pendingMutationCount() = pending
     override suspend fun protect(ownerId: String) { protected += ownerId; events += "protect:$ownerId" }
     override suspend fun restoreProtected(ownerId: String) = protected.contains(ownerId)

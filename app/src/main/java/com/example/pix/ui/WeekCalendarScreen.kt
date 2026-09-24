@@ -119,7 +119,7 @@ fun WeekCalendarScreen(
             items(tasks.filter { spansEarlier(it) }, key = { it.task.id }) { detail ->
                 TaskRow(detail, { open(detail) }, { complete(detail.task) })
             }
-            items(dayGoogle.filter { googleAllDay(it) }, key = { "g-" + it.id }) { event ->
+            items(dayGoogle.filter { googleAllDay(it) }, key = { "g-" + it.stableKey }) { event ->
                 GoogleEventRow(event) { openGoogle(event) }
             }
             if (tasks.none { spansEarlier(it) } && dayGoogle.none { googleAllDay(it) })
@@ -174,7 +174,7 @@ fun WeekCalendarScreen(
                     dayGoogle.filter {
                         !googleAllDay(it) && (it.startMinute ?: 0) / 60 == hour && it.startDay == selectedDay
                     },
-                    key = { "gh-$hour-${it.id}" },
+                    key = { "gh-$hour-${it.stableKey}" },
                 ) { event ->
                     GoogleEventRow(event) { openGoogle(event) }
                 }

@@ -338,39 +338,53 @@ interface SyncDao {
 
 @Dao
 interface GoogleDao {
-    @Query("SELECT * FROM google_calendars ORDER BY summary")
-    fun observeCalendars(): Flow<List<GoogleCalendarEntity>>
+    @Query("SELECT * FROM google_calendar_accounts LIMIT 1")
+    fun observeAccount(): Flow<GoogleCalendarAccountEntity?>
 
-    @Query("SELECT * FROM google_calendars ORDER BY summary")
-    suspend fun calendars(): List<GoogleCalendarEntity>
+    @Query("SELECT * FROM google_calendar_accounts LIMIT 1")
+    suspend fun account(): GoogleCalendarAccountEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun saveCalendar(calendar: GoogleCalendarEntity)
+    @Query("SELECT * FROM google_calendar_accounts WHERE id=:accountId LIMIT 1")
+    suspend fun account(accountId: String): GoogleCalendarAccountEntity?
 
-    @Query("UPDATE google_calendars SET enabled=:enabled WHERE id=:id")
-    suspend fun setEnabled(id: String, enabled: Boolean)
+    @Upsert suspend fun saveAccount(account: GoogleCalendarAccountEntity)
+
+    @Query("DELETE FROM google_calendar_accounts")
+    suspend fun clearAccounts()
+
+    @Query("SELECT * FROM google_calendars WHERE accountId=:accountId ORDER BY summary")
+    fun observeCalendars(accountId: String): Flow<List<GoogleCalendarEntity>>
+
+    @Query("SELECT * FROM google_calendars WHERE accountId=:accountId ORDER BY summary")
+    suspend fun calendars(accountId: String): List<GoogleCalendarEntity>
+
+    @Upsert suspend fun saveCalendar(calendar: GoogleCalendarEntity)
+
+    @Query("UPDATE google_calendars SET enabled=:enabled WHERE accountId=:accountId AND id=:calendarId")
+    suspend fun setEnabled(accountId: String, calendarId: String, enabled: Boolean)
 
     @Query("DELETE FROM google_calendars") suspend fun clearCalendars()
 
     @Query(
-        "SELECT * FROM google_events WHERE cancelled=0 AND calendarId IN (SELECT id FROM google_calendars WHERE enabled=1) AND startDay < :end AND endDay > :start"
+        "SELECT e.* FROM google_events e INNER JOIN google_calendars c ON c.accountId=e.accountId AND c.id=e.calendarId WHERE e.accountId=:accountId AND e.cancelled=0 AND c.enabled=1 AND e.startDay < :end AND e.endDay > :start"
     )
-    fun observeEvents(start: Long, end: Long): Flow<List<GoogleEventEntity>>
+    fun observeEvents(accountId: String, start: Long, end: Long): Flow<List<GoogleEventEntity>>
 
-    @Query("SELECT * FROM google_events WHERE calendarId=:calendarId")
-    suspend fun events(calendarId: String): List<GoogleEventEntity>
+    @Query("SELECT * FROM google_events WHERE accountId=:accountId AND calendarId=:calendarId")
+    suspend fun events(accountId: String, calendarId: String): List<GoogleEventEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveEvent(event: GoogleEventEntity)
+    @Upsert suspend fun saveEvent(event: GoogleEventEntity)
 
-    @Query("DELETE FROM google_events WHERE id=:id") suspend fun deleteEvent(id: String)
+    @Query("DELETE FROM google_events WHERE accountId=:accountId AND calendarId=:calendarId AND eventId=:eventId")
+    suspend fun deleteEvent(accountId: String, calendarId: String, eventId: String)
 
-    @Query("DELETE FROM google_events WHERE calendarId=:calendarId")
-    suspend fun clearEvents(calendarId: String)
+    @Query("DELETE FROM google_events WHERE accountId=:accountId AND calendarId=:calendarId")
+    suspend fun clearEvents(accountId: String, calendarId: String)
 
     @Query("DELETE FROM google_events") suspend fun clearAllEvents()
 
-    @Query("SELECT * FROM google_sync_state WHERE calendarId=:id")
-    suspend fun syncState(id: String): GoogleSyncStateEntity?
+    @Query("SELECT * FROM google_sync_state WHERE accountId=:accountId AND calendarId=:calendarId")
+    suspend fun syncState(accountId: String, calendarId: String): GoogleSyncStateEntity?
 
     @Upsert suspend fun saveSyncState(state: GoogleSyncStateEntity)
 
@@ -391,11 +405,12 @@ interface GoogleDao {
             SyncOutboxEntity::class,
             SyncStateEntity::class,
             SyncEntityVersionEntity::class,
+            GoogleCalendarAccountEntity::class,
             GoogleCalendarEntity::class,
             GoogleEventEntity::class,
             GoogleSyncStateEntity::class,
         ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class PixDatabase : RoomDatabase() {
@@ -406,6 +421,51 @@ abstract class PixDatabase : RoomDatabase() {
     abstract fun googleDao(): GoogleDao
 
     companion object {
+        val MIGRATION_7_8 =
+            object : androidx.room.migration.Migration(7, 8) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    // Legacy Google Calendar rows did not record their owning Google account and
+                    // event IDs were incorrectly treated as globally unique. Do not guess ownership
+                    // from calendarId: discard only the Google cache and recreate it safely.
+                    db.execSQL("DROP TABLE IF EXISTS google_events")
+                    db.execSQL("DROP TABLE IF EXISTS google_sync_state")
+                    db.execSQL("DROP TABLE IF EXISTS google_calendars")
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS google_calendar_accounts (id TEXT NOT NULL, email TEXT NOT NULL, PRIMARY KEY(id))"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_google_calendar_accounts_email ON google_calendar_accounts(email)"
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS google_calendars (accountId TEXT NOT NULL, id TEXT NOT NULL, summary TEXT NOT NULL, colorArgb INTEGER NOT NULL, timeZone TEXT, enabled INTEGER NOT NULL, accessRole TEXT, PRIMARY KEY(accountId, id), FOREIGN KEY(accountId) REFERENCES google_calendar_accounts(id) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_google_calendars_accountId ON google_calendars(accountId)"
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS google_events (accountId TEXT NOT NULL, calendarId TEXT NOT NULL, eventId TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, location TEXT NOT NULL, startDay INTEGER NOT NULL, endDay INTEGER NOT NULL, startMinute INTEGER, endMinute INTEGER, allDay INTEGER NOT NULL, status TEXT NOT NULL, cancelled INTEGER NOT NULL, updatedAt INTEGER NOT NULL, recurringEventId TEXT, originalStartDay INTEGER, originalStartMinute INTEGER, colorArgb INTEGER NOT NULL, PRIMARY KEY(accountId, calendarId, eventId), FOREIGN KEY(accountId, calendarId) REFERENCES google_calendars(accountId, id) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_google_events_accountId_calendarId ON google_events(accountId, calendarId)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_google_events_startDay ON google_events(startDay)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_google_events_endDay ON google_events(endDay)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_google_events_accountId_calendarId_recurringEventId_originalStartDay_originalStartMinute ON google_events(accountId, calendarId, recurringEventId, originalStartDay, originalStartMinute)"
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS google_sync_state (accountId TEXT NOT NULL, calendarId TEXT NOT NULL, syncToken TEXT, lastSyncAt INTEGER NOT NULL, PRIMARY KEY(accountId, calendarId), FOREIGN KEY(accountId, calendarId) REFERENCES google_calendars(accountId, id) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_google_sync_state_accountId_calendarId ON google_sync_state(accountId, calendarId)"
+                    )
+                }
+            }
+
         val MIGRATION_6_7 =
             object : androidx.room.migration.Migration(6, 7) {
                 override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -518,6 +578,7 @@ abstract class PixDatabase : RoomDatabase() {
                     MIGRATION_4_5,
                     MIGRATION_5_6,
                     MIGRATION_6_7,
+                    MIGRATION_7_8,
                 )
                 .build()
     }

@@ -20,6 +20,7 @@ class MigrationTest {
             PixDatabase.MIGRATION_4_5,
             PixDatabase.MIGRATION_5_6,
             PixDatabase.MIGRATION_6_7,
+            PixDatabase.MIGRATION_7_8,
         )
 
     @Test fun versionOneDataSurvivesMigration() = verifyMigration(1)
@@ -33,7 +34,7 @@ class MigrationTest {
     @Test fun versionFiveDataSurvivesMigration() = verifyMigration(5)
 
     @Test
-    fun versionSixOutboxAndCalendarCachePersistAcrossV7Migration() = runBlocking {
+    fun versionSixOutboxPersistsAndUnownedGoogleCacheIsResetByV8() = runBlocking {
         val context = instrumentation.targetContext
         val name = "migration-v6-reopen-${System.nanoTime()}.db"
         try {
@@ -76,27 +77,10 @@ class MigrationTest {
                 assertEquals("Idle", syncState.status)
                 assertTrue(db.syncDao().versions("account-1").isEmpty())
 
-                val calendar = db.googleDao().calendars().single()
-                assertEquals("calendar-1", calendar.id)
-                assertEquals("Legacy calendar", calendar.summary)
-                assertEquals("Europe/Rome", calendar.timeZone)
-                assertTrue(calendar.enabled)
-                assertEquals("reader", calendar.accessRole)
-
-                val event = db.googleDao().events("calendar-1").single()
-                assertEquals("event-1", event.id)
-                assertEquals("Event", event.title)
-                assertEquals(22000L, event.startDay)
-                assertEquals(22001L, event.endDay)
-                assertEquals(600, event.startMinute)
-                assertEquals(660, event.endMinute)
-                assertFalse(event.allDay)
-                assertFalse(event.cancelled)
-                assertEquals(400L, event.updatedAt)
-
-                val googleState = db.googleDao().syncState("calendar-1")!!
-                assertEquals("token-1", googleState.syncToken)
-                assertEquals(500L, googleState.lastSyncAt)
+                // v7 Calendar rows had no explicit Google-account owner. v8 intentionally drops
+                // only that cache instead of guessing ownership from calendarId.
+                assertNull(db.googleDao().account())
+                assertTrue(db.googleDao().calendars("missing").isEmpty())
             } finally {
                 db.close()
             }
@@ -106,14 +90,14 @@ class MigrationTest {
     }
 
     private fun verifyMigration(version: Int) {
-        val name = "migration-v${version}-to-v7-${System.nanoTime()}.db"
+        val name = "migration-v${version}-to-v8-${System.nanoTime()}.db"
         try {
             helper.createDatabase(name, version).use { db -> seedLegacyData(db, version) }
 
-            helper.runMigrationsAndValidate(name, 7, true, *migrations).use { db ->
+            helper.runMigrationsAndValidate(name, 8, true, *migrations).use { db ->
                 assertCoreData(db, version)
                 assertVersionSpecificData(db, version)
-                assertVersionSevenInfrastructure(db)
+                assertVersionEightInfrastructure(db)
                 assertNoForeignKeyViolations(db)
             }
         } finally {
@@ -363,19 +347,20 @@ class MigrationTest {
         }
     }
 
-    private fun assertVersionSevenInfrastructure(db: SupportSQLiteDatabase) {
+    private fun assertVersionEightInfrastructure(db: SupportSQLiteDatabase) {
         val expectedTables =
             setOf(
                 "sync_outbox",
                 "sync_state",
                 "sync_entity_versions",
+                "google_calendar_accounts",
                 "google_calendars",
                 "google_events",
                 "google_sync_state",
             )
         val actual = mutableSetOf<String>()
         db.query(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sync_outbox','sync_state','sync_entity_versions','google_calendars','google_events','google_sync_state')"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sync_outbox','sync_state','sync_entity_versions','google_calendar_accounts','google_calendars','google_events','google_sync_state')"
             )
             .use { cursor ->
                 while (cursor.moveToNext()) actual += cursor.getString(0)

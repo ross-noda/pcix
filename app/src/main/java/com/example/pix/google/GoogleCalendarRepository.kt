@@ -7,95 +7,193 @@ import android.util.Log
 import androidx.room.withTransaction
 import com.example.pix.cloud.CloudConfig
 import com.example.pix.cloud.CloudHttp
+import com.example.pix.data.GoogleCalendarAccountEntity
 import com.example.pix.data.GoogleCalendarEntity
 import com.example.pix.data.GoogleSyncStateEntity
 import com.example.pix.data.PixDatabase
-import com.google.android.gms.auth.api.identity.AuthorizationRequest
-import com.google.android.gms.auth.api.identity.Identity
-import com.google.android.gms.common.api.Scope
 import java.net.URLEncoder
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import org.json.JSONArray
 import org.json.JSONObject
 
-class GoogleCalendarRepository(
+class GoogleCalendarRepository internal constructor(
     private val context: Context,
     private val db: PixDatabase,
     private val http: CloudHttp,
-    private val config: CloudConfig,
+    @Suppress("UNUSED_PARAMETER") config: CloudConfig,
+    private val authorization: GoogleAuthorizationGateway =
+        PlayServicesGoogleAuthorizationGateway(context),
 ) {
-    private val prefs = context.getSharedPreferences("pcix.google", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val dao = db.googleDao()
-    val calendars = dao.observeCalendars()
-    private val _needsReconnect = MutableStateFlow(prefs.getBoolean("reconnect", false))
-    val needsReconnect: StateFlow<Boolean> = _needsReconnect
-    val email: String?
-        get() = prefs.getString("email", null)
-
-    fun connected() = prefs.getBoolean("connected", false)
-
-    fun events(start: Long, end: Long) = dao.observeEvents(start, end)
-
-    fun authorizationIntentSender(activity: Activity): IntentSender? = null
-
-    suspend fun authorize(activity: Activity): AuthOutcome {
-        val request =
-            AuthorizationRequest.builder()
-                .setRequestedScopes(
-                    listOf(
-                        Scope("https://www.googleapis.com/auth/calendar.calendarlist.readonly"),
-                        Scope("https://www.googleapis.com/auth/calendar.events.readonly"),
-                    )
-                )
-                .build()
-        val result = Identity.getAuthorizationClient(activity).authorize(request).await()
-        if (result.hasResolution()) {
-            return AuthOutcome.Resolution(result.pendingIntent!!.intentSender)
+    private val _activeGoogleAccountId = MutableStateFlow(prefs.getString(KEY_ACCOUNT_ID, null))
+    val calendars =
+        _activeGoogleAccountId.flatMapLatest { accountId ->
+            if (accountId == null) flowOf(emptyList()) else dao.observeCalendars(accountId)
         }
-        val token = result.accessToken ?: return AuthOutcome.Failed
-        prefs
-            .edit()
-            .putBoolean("connected", true)
-            .putBoolean("reconnect", false)
-            .putString("email", result.grantedScopes?.let { email } ?: email)
-            .apply()
+    private val _needsReconnect = MutableStateFlow(prefs.getBoolean(KEY_RECONNECT, false))
+    val needsReconnect: StateFlow<Boolean> = _needsReconnect
+
+    val email: String?
+        get() = prefs.getString(KEY_ACCOUNT_EMAIL, null)
+
+    init {
+        // Previous builds persisted bearer tokens with a made-up 45-minute expiry. Remove those
+        // values unconditionally; Google Play services is now the only token cache.
+        if (prefs.contains(LEGACY_ACCESS) || prefs.contains(LEGACY_ACCESS_EXPIRES)) {
+            prefs.edit().remove(LEGACY_ACCESS).remove(LEGACY_ACCESS_EXPIRES).apply()
+        }
+        // v7 Google cache had no trustworthy account owner. Never infer it from calendar IDs.
+        if (prefs.getBoolean(KEY_CONNECTED, false) && prefs.getString(KEY_ACCOUNT_ID, null) == null) {
+            prefs
+                .edit()
+                .putBoolean(KEY_RECONNECT, true)
+                .remove(KEY_ACCOUNT_EMAIL)
+                .apply()
+            _needsReconnect.value = true
+        }
+    }
+
+    fun connected() = prefs.getBoolean(KEY_CONNECTED, false)
+
+    fun events(start: Long, end: Long) =
+        _activeGoogleAccountId.flatMapLatest { accountId ->
+            if (accountId == null) flowOf(emptyList()) else dao.observeEvents(accountId, start, end)
+        }
+
+    suspend fun authorize(@Suppress("UNUSED_PARAMETER") activity: Activity): AuthOutcome =
+        runCatching {
+                val account = activeAccount()
+                when (val result = authorization.authorize(account?.email, interactive = true)) {
+                    is GoogleAuthorizationResult.Authorized ->
+                        finishAuthorization(result.accessToken, account)
+                    is GoogleAuthorizationResult.Resolution -> AuthOutcome.Resolution(result.sender)
+                    GoogleAuthorizationResult.Unavailable -> AuthOutcome.Failed
+                }
+            }
+            .getOrElse {
+                Log.w(TAG, "calendar authorization failed", it)
+                AuthOutcome.Failed
+            }
+
+    suspend fun completeAuthorization(
+        @Suppress("UNUSED_PARAMETER") activity: Activity,
+        data: android.content.Intent,
+    ) {
+        runCatching {
+                val result = authorization.complete(data) ?: return@runCatching
+                finishAuthorization(result.accessToken, activeAccount())
+            }
+            .onFailure { Log.w(TAG, "calendar authorization completion failed", it) }
+    }
+
+    suspend fun setEnabled(id: String, enabled: Boolean) {
+        val account = activeAccount() ?: return
+        dao.setEnabled(account.id, id, enabled)
+    }
+
+    suspend fun synchronize(@Suppress("UNUSED_PARAMETER") activity: Activity? = null): SyncOutcome {
+        if (!connected()) return SyncOutcome.NotConnected
+        val account = activeAccount() ?: return markReconnect()
+        val token =
+            when (val result = authorization.authorize(account.email, interactive = false)) {
+                is GoogleAuthorizationResult.Authorized -> result.accessToken
+                is GoogleAuthorizationResult.Resolution,
+                GoogleAuthorizationResult.Unavailable -> return markReconnect()
+            }
+        markReady(account)
+        val enabled = dao.calendars(account.id).filter { it.enabled }
+        for (calendar in enabled) {
+            if (!syncCalendar(token, account, calendar)) return SyncOutcome.NeedsReconnect
+        }
+        return SyncOutcome.Synced
+    }
+
+    suspend fun disconnect(@Suppress("UNUSED_PARAMETER") activity: Activity?) {
+        val account = activeAccount()
+        if (account != null) {
+            runCatching { authorization.revokeCalendarAccess(account.email) }
+                .onFailure { Log.w(TAG, "calendar authorization revocation failed", it) }
+        }
+        prefs.edit().clear().apply()
+        _activeGoogleAccountId.value = null
         _needsReconnect.value = false
-        storeToken(token)
-        refreshCalendarList()
+        db.withTransaction {
+            // Account row owns calendars, events and sync-state through CASCADE.
+            dao.clearAccounts()
+        }
+    }
+
+    private suspend fun finishAuthorization(
+        token: String,
+        existingAccount: GoogleCalendarAccountEntity?,
+    ): AuthOutcome {
+        val account = existingAccount ?: fetchGoogleAccount(token) ?: return AuthOutcome.Failed
+        if (existingAccount == null) {
+            db.withTransaction {
+                dao.clearAccounts()
+                dao.saveAccount(account)
+            }
+        }
+        markReady(account)
+        if (!refreshCalendarList(token, account)) return AuthOutcome.Failed
         return AuthOutcome.Ready
     }
 
-    suspend fun completeAuthorization(activity: Activity, data: android.content.Intent) {
-        val result = Identity.getAuthorizationClient(activity).getAuthorizationResultFromIntent(data)
-        val token = result.accessToken ?: return
-        prefs.edit().putBoolean("connected", true).putBoolean("reconnect", false).apply()
+    private suspend fun activeAccount(): GoogleCalendarAccountEntity? {
+        val id = prefs.getString(KEY_ACCOUNT_ID, null) ?: return null
+        return dao.account(id)
+    }
+
+    private fun markReady(account: GoogleCalendarAccountEntity) {
+        prefs
+            .edit()
+            .putBoolean(KEY_CONNECTED, true)
+            .putBoolean(KEY_RECONNECT, false)
+            .putString(KEY_ACCOUNT_ID, account.id)
+            .putString(KEY_ACCOUNT_EMAIL, account.email)
+            .apply()
+        _activeGoogleAccountId.value = account.id
         _needsReconnect.value = false
-        storeToken(token)
-        refreshCalendarList()
     }
 
-    suspend fun accessToken(activity: Activity?): String? {
-        val cached = prefs.getString("access", null)
-        val expiry = prefs.getLong("accessExpires", 0)
-        if (cached != null && System.currentTimeMillis() < expiry - 30_000) return cached
-        if (activity == null) return cached
-        return when (val outcome = authorize(activity)) {
-            AuthOutcome.Ready -> prefs.getString("access", null)
-            else -> null
-        }
+    private fun markReconnect(): SyncOutcome {
+        prefs.edit().putBoolean(KEY_RECONNECT, true).apply()
+        _needsReconnect.value = true
+        Log.w(TAG, "calendar authorization must be renewed")
+        return SyncOutcome.NeedsReconnect
     }
 
-    private fun storeToken(token: String) {
-        prefs.edit().putString("access", token).putLong("accessExpires", System.currentTimeMillis() + 45 * 60_000).apply()
+    private fun fetchGoogleAccount(token: String): GoogleCalendarAccountEntity? {
+        val response =
+            http.client
+                .newCall(
+                    okhttp3.Request.Builder()
+                        .url("https://openidconnect.googleapis.com/v1/userinfo")
+                        .header("Authorization", "Bearer $token")
+                        .build()
+                )
+                .execute()
+        val code = response.code
+        val body = response.body?.string().orEmpty()
+        response.close()
+        if (code !in 200..299) return null
+        val json = JSONObject(body)
+        val id = json.optString("sub").takeIf { it.isNotBlank() } ?: return null
+        val accountEmail = json.optString("email").takeIf { it.isNotBlank() } ?: return null
+        return GoogleCalendarAccountEntity(id = id, email = accountEmail)
     }
 
-    suspend fun refreshCalendarList(activity: Activity? = null) {
-        val token = accessToken(activity) ?: return markReconnect()
+    private suspend fun refreshCalendarList(
+        token: String,
+        account: GoogleCalendarAccountEntity,
+    ): Boolean {
         val response =
             http.client
                 .newCall(
@@ -105,15 +203,16 @@ class GoogleCalendarRepository(
                         .build()
                 )
                 .execute()
-        if (response.code == 401 || response.code == 403) {
-            response.close()
-            return markReconnect()
-        }
+        val code = response.code
         val body = response.body?.string().orEmpty()
         response.close()
-        if (!response.isSuccessful) throw IllegalStateException("calendarList")
+        if (code == 401 || code == 403) {
+            markReconnect()
+            return false
+        }
+        if (code !in 200..299) throw IllegalStateException("calendarList $code")
         val items = JSONObject(body).optJSONArray("items") ?: JSONArray()
-        val existing = dao.calendars().associateBy { it.id }
+        val existing = dao.calendars(account.id).associateBy { it.id }
         db.withTransaction {
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
@@ -121,40 +220,40 @@ class GoogleCalendarRepository(
                 val previous = existing[id]
                 dao.saveCalendar(
                     GoogleCalendarEntity(
+                        accountId = account.id,
                         id = id,
                         summary = item.optString("summary").ifBlank { id },
-                        colorArgb = GoogleColors.argb(item.optString("backgroundColor").ifBlank { null }),
+                        colorArgb =
+                            GoogleColors.argb(
+                                item.optString("backgroundColor").ifBlank { null }
+                            ),
                         timeZone = item.optString("timeZone").takeIf { it.isNotBlank() },
                         enabled = previous?.enabled ?: true,
-                        accessRole = item.optString("accessRole"),
+                        accessRole = item.optString("accessRole").takeIf { it.isNotBlank() },
                     )
                 )
             }
         }
-        prefs.edit().putString("email", inferEmail(items)).apply()
+        return true
     }
 
-    suspend fun setEnabled(id: String, enabled: Boolean) = dao.setEnabled(id, enabled)
-
-    suspend fun synchronize(activity: Activity? = null) {
-        if (!connected()) return
-        val token = accessToken(activity) ?: return markReconnect()
-        val enabled = dao.calendars().filter { it.enabled }
-        enabled.forEach { calendar -> syncCalendar(token, calendar) }
-    }
-
-    private suspend fun syncCalendar(token: String, calendar: GoogleCalendarEntity) {
-        var state = dao.syncState(calendar.id)
+    private suspend fun syncCalendar(
+        token: String,
+        account: GoogleCalendarAccountEntity,
+        calendar: GoogleCalendarEntity,
+    ): Boolean {
         var pageToken: String? = null
-        var syncToken = state?.syncToken
-        var first = syncToken == null
+        var syncToken = dao.syncState(account.id, calendar.id)?.syncToken
         while (true) {
-            val url = StringBuilder("https://www.googleapis.com/calendar/v3/calendars/")
-                .append(URLEncoder.encode(calendar.id, "UTF-8"))
-                .append("/events?singleEvents=true&showDeleted=true")
-            if (pageToken != null) url.append("&pageToken=").append(URLEncoder.encode(pageToken, "UTF-8"))
-            else if (syncToken != null) url.append("&syncToken=").append(URLEncoder.encode(syncToken, "UTF-8"))
-            else {
+            val url =
+                StringBuilder("https://www.googleapis.com/calendar/v3/calendars/")
+                    .append(URLEncoder.encode(calendar.id, "UTF-8"))
+                    .append("/events?singleEvents=true&showDeleted=true")
+            if (pageToken != null) {
+                url.append("&pageToken=").append(URLEncoder.encode(pageToken, "UTF-8"))
+            } else if (syncToken != null) {
+                url.append("&syncToken=").append(URLEncoder.encode(syncToken, "UTF-8"))
+            } else {
                 val min = Instant.now().minus(365, ChronoUnit.DAYS).toString()
                 url.append("&timeMin=").append(URLEncoder.encode(min, "UTF-8"))
             }
@@ -171,13 +270,16 @@ class GoogleCalendarRepository(
             val body = response.body?.string().orEmpty()
             response.close()
             if (code == 410 && syncToken != null) {
-                dao.saveSyncState(GoogleSyncStateEntity(calendar.id, null, 0))
-                dao.clearEvents(calendar.id)
+                dao.saveSyncState(GoogleSyncStateEntity(account.id, calendar.id, null, 0))
+                dao.clearEvents(account.id, calendar.id)
                 syncToken = null
                 pageToken = null
                 continue
             }
-            if (code == 401 || code == 403) return markReconnect()
+            if (code == 401 || code == 403) {
+                markReconnect()
+                return false
+            }
             if (code !in 200..299) throw IllegalStateException("events $code")
             val json = JSONObject(body)
             val items = json.optJSONArray("items") ?: JSONArray()
@@ -185,57 +287,35 @@ class GoogleCalendarRepository(
             db.withTransaction {
                 for (i in 0 until items.length()) {
                     val parsed =
-                        GoogleEventParser.parse(calendar.id, calendar.colorArgb, items.getJSONObject(i), zone)
-                            ?: continue
-                    if (parsed.cancelled) dao.deleteEvent(parsed.id) else dao.saveEvent(parsed)
+                        GoogleEventParser.parse(
+                            account.id,
+                            calendar.id,
+                            calendar.colorArgb,
+                            items.getJSONObject(i),
+                            zone,
+                        ) ?: continue
+                    if (parsed.cancelled) {
+                        dao.deleteEvent(account.id, calendar.id, parsed.eventId)
+                    } else {
+                        dao.saveEvent(parsed)
+                    }
                 }
             }
             pageToken = json.optString("nextPageToken").takeIf { it.isNotBlank() }
             val nextSync = json.optString("nextSyncToken").takeIf { it.isNotBlank() }
             if (nextSync != null) {
                 dao.saveSyncState(
-                    GoogleSyncStateEntity(calendar.id, nextSync, System.currentTimeMillis())
+                    GoogleSyncStateEntity(
+                        accountId = account.id,
+                        calendarId = calendar.id,
+                        syncToken = nextSync,
+                        lastSyncAt = System.currentTimeMillis(),
+                    )
                 )
             }
             if (pageToken == null) break
-            if (first) first = false
         }
-    }
-
-    suspend fun disconnect(activity: Activity?) {
-        runCatching {
-            val token = prefs.getString("access", null)
-            if (token != null) {
-                Identity.getAuthorizationClient(activity ?: return@runCatching)
-                    .clearToken(
-                        com.google.android.gms.auth.api.identity.ClearTokenRequest.builder()
-                            .setToken(token)
-                            .build()
-                    )
-                    .await()
-            }
-        }
-        prefs.edit().clear().apply()
-        _needsReconnect.value = false
-        db.withTransaction {
-            dao.clearAllEvents()
-            dao.clearCalendars()
-            dao.clearSyncState()
-        }
-    }
-
-    private fun markReconnect() {
-        prefs.edit().putBoolean("reconnect", true).remove("access").apply()
-        _needsReconnect.value = true
-        Log.w("PcixGoogle", "calendar authorization must be renewed")
-    }
-
-    private fun inferEmail(items: JSONArray): String? {
-        for (i in 0 until items.length()) {
-            val id = items.getJSONObject(i).optString("id")
-            if ('@' in id) return id
-        }
-        return email
+        return true
     }
 
     sealed class AuthOutcome {
@@ -244,5 +324,22 @@ class GoogleCalendarRepository(
         data class Resolution(val sender: IntentSender) : AuthOutcome()
 
         data object Failed : AuthOutcome()
+    }
+
+    enum class SyncOutcome {
+        Synced,
+        NotConnected,
+        NeedsReconnect,
+    }
+
+    private companion object {
+        const val TAG = "PcixGoogle"
+        const val PREFS = "pcix.google"
+        const val KEY_CONNECTED = "connected"
+        const val KEY_RECONNECT = "reconnect"
+        const val KEY_ACCOUNT_ID = "accountId"
+        const val KEY_ACCOUNT_EMAIL = "accountEmail"
+        const val LEGACY_ACCESS = "access"
+        const val LEGACY_ACCESS_EXPIRES = "accessExpires"
     }
 }

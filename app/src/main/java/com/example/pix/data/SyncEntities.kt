@@ -40,9 +40,29 @@ data class SyncEntityVersionEntity(
     val deleted: Boolean = false,
 )
 
-@Entity(tableName = "google_calendars")
-data class GoogleCalendarEntity(
+@Entity(tableName = "google_calendar_accounts", indices = [Index(value = ["email"])])
+data class GoogleCalendarAccountEntity(
     @PrimaryKey val id: String,
+    val email: String,
+)
+
+@Entity(
+    tableName = "google_calendars",
+    primaryKeys = ["accountId", "id"],
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = GoogleCalendarAccountEntity::class,
+                parentColumns = ["id"],
+                childColumns = ["accountId"],
+                onDelete = ForeignKey.CASCADE,
+            )
+        ],
+    indices = [Index("accountId")],
+)
+data class GoogleCalendarEntity(
+    val accountId: String,
+    val id: String,
     val summary: String,
     val colorArgb: Int = 0xFF5B8BB0.toInt(),
     val timeZone: String? = null,
@@ -52,20 +72,27 @@ data class GoogleCalendarEntity(
 
 @Entity(
     tableName = "google_events",
+    primaryKeys = ["accountId", "calendarId", "eventId"],
     foreignKeys =
         [
             ForeignKey(
                 entity = GoogleCalendarEntity::class,
-                parentColumns = ["id"],
-                childColumns = ["calendarId"],
+                parentColumns = ["accountId", "id"],
+                childColumns = ["accountId", "calendarId"],
                 onDelete = ForeignKey.CASCADE,
             )
         ],
-    indices = [Index("calendarId"), Index("startDay"), Index("endDay")],
+    indices = [
+        Index(value = ["accountId", "calendarId"]),
+        Index("startDay"),
+        Index("endDay"),
+        Index(value = ["accountId", "calendarId", "recurringEventId", "originalStartDay", "originalStartMinute"]),
+    ],
 )
 data class GoogleEventEntity(
-    @PrimaryKey val id: String,
+    val accountId: String,
     val calendarId: String,
+    val eventId: String,
     val title: String,
     val description: String = "",
     val location: String = "",
@@ -78,12 +105,32 @@ data class GoogleEventEntity(
     val cancelled: Boolean = false,
     val updatedAt: Long = 0,
     val recurringEventId: String? = null,
+    val originalStartDay: Long? = null,
+    val originalStartMinute: Int? = null,
     val colorArgb: Int = 0xFF5B8BB0.toInt(),
-)
+) {
+    @get:Ignore
+    val stableKey: String
+        get() = "$accountId\u0000$calendarId\u0000$eventId"
+}
 
-@Entity(tableName = "google_sync_state")
+@Entity(
+    tableName = "google_sync_state",
+    primaryKeys = ["accountId", "calendarId"],
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = GoogleCalendarEntity::class,
+                parentColumns = ["accountId", "id"],
+                childColumns = ["accountId", "calendarId"],
+                onDelete = ForeignKey.CASCADE,
+            )
+        ],
+    indices = [Index(value = ["accountId", "calendarId"])],
+)
 data class GoogleSyncStateEntity(
-    @PrimaryKey val calendarId: String,
+    val accountId: String,
+    val calendarId: String,
     val syncToken: String? = null,
     val lastSyncAt: Long = 0,
 )

@@ -10,7 +10,6 @@ interface AccountDataStore {
     fun setOwner(id: String?)
     suspend fun hasLegacyData(): Boolean
     suspend fun wipeUserData()
-    suspend fun clearGoogle()
     suspend fun pendingMutationCount(): Int = 0
     suspend fun protect(ownerId: String) = Unit
     suspend fun restoreProtected(ownerId: String): Boolean = false
@@ -87,11 +86,6 @@ class AccountStore(private val context: Context, private val db: PixDatabase) : 
         ReminderWork.reconcile(context)
     }
 
-    override suspend fun clearGoogle() {
-        db.googleDao().clearAllEvents()
-        db.googleDao().clearCalendars()
-        db.googleDao().clearSyncState()
-    }
 }
 
 data class LegacyCounts(val tasks: Int, val lists: Int, val tags: Int)
