@@ -192,31 +192,33 @@ class TransactionalOutboxAuditTest {
     fun subtasksAndBothReorderPathsAreQueued() = runBlocking {
         val task = TaskEntity(title = "Parent")
         repo.create(task)
-        val a = SubtaskEntity(taskId = task.id, title = "A", sortOrder = 0)
-        val b = SubtaskEntity(taskId = task.id, title = "B", sortOrder = 1)
-        repo.saveSubtask(a)
-        assertEquals("A", assertUpsert("subtasks", a.id).getString("title"))
-        repo.saveSubtask(b)
-        assertEquals("B", assertUpsert("subtasks", b.id).getString("title"))
+        val a = TaskEntity(parentTaskId = task.id, title = "A", sortOrder = 0)
+        val b = TaskEntity(parentTaskId = task.id, title = "B", sortOrder = 1)
+        repo.saveChildForTest(a)
+        assertEquals("A", assertUpsert("tasks", a.id).getString("title"))
+        repo.saveChildForTest(b)
+        assertEquals("B", assertUpsert("tasks", b.id).getString("title"))
         db.syncDao().clear()
 
-        repo.reorderSubtask(a.id, b.id, task.id, RecurrenceScope.ONLY_THIS)
-        assertTrue(pending("subtasks", a.id).isNotEmpty())
-        assertTrue(pending("subtasks", b.id).isNotEmpty())
+        repo.reorderChild(b.id, a.id, task.id)
+        assertTrue(pending("tasks", a.id).isNotEmpty())
+        assertTrue(pending("tasks", b.id).isNotEmpty())
 
         db.syncDao().clear()
-        repo.moveSubtask(a.id, task.id, -1, RecurrenceScope.ONLY_THIS)
-        assertTrue(pending("subtasks", a.id).isNotEmpty() || pending("subtasks", b.id).isNotEmpty())
+        assertEquals(listOf(a.id, b.id), db.dao().children(task.id).map { it.id })
+        repo.moveChild(b.id, task.id, -1)
+        assertEquals(listOf(b.id, a.id), db.dao().children(task.id).map { it.id })
+        assertTrue(pending("tasks", a.id).isNotEmpty() || pending("tasks", b.id).isNotEmpty())
 
         db.syncDao().clear()
-        repo.saveSubtask(a.copy(title = "A2", isCompleted = true))
-        val payload = assertUpsert("subtasks", a.id)
+        repo.saveChildForTest(a.copy(title = "A2", isCompleted = true))
+        val payload = assertUpsert("tasks", a.id)
         assertEquals("A2", payload.getString("title"))
         assertTrue(payload.getBoolean("is_completed"))
 
         db.syncDao().clear()
-        repo.deleteSubtask(a.id, task.id, RecurrenceScope.ONLY_THIS)
-        assertDelete("subtasks", a.id)
+        repo.delete(a.id)
+        assertDelete("tasks", a.id)
     }
 
     @Test
@@ -277,8 +279,8 @@ class TransactionalOutboxAuditTest {
         val task = TaskEntity(title = "Original")
         val tag = repo.saveTag("T", 1)
         repo.create(task, setOf(tag))
-        val subtask = SubtaskEntity(taskId = task.id, title = "Child")
-        repo.saveSubtask(subtask)
+        val subtask = TaskEntity(parentTaskId = task.id, title = "Child")
+        repo.saveChildForTest(subtask)
         val image = TaskImage(taskId = task.id, fileName = "metadata.image")
         repo.addImage(image)
         db.syncDao().clear()
@@ -286,10 +288,10 @@ class TransactionalOutboxAuditTest {
         repo.duplicate(task.id)
         val copies =
             repo.observe(TaskFilter(mode = "ALL"), java.time.ZonedDateTime.now()).first()
-        val copy = copies.single { it.task.id != task.id }
+        val copy = copies.single { it.task.id != task.id && it.task.parentTaskId == null }
         assertUpsert("tasks", copy.task.id)
-        assertEquals(1, copy.subtasks.size)
-        assertTrue(pending("subtasks", copy.subtasks.single().id).isNotEmpty())
+        assertTrue(copy.visibleChildren.isEmpty())
+        assertEquals(task.id, repo.details(subtask.id)!!.task.parentTaskId)
         assertEquals(1, copy.images.size)
         assertTrue(pending("task_images", copy.images.single().id).isNotEmpty())
         assertTrue(pending("task_tags", OutboxRecorder.linkId(copy.task.id, tag)).isNotEmpty())
@@ -305,7 +307,7 @@ class TransactionalOutboxAuditTest {
     }
 
     @Test
-    fun coalescingRetryAndCrashRollbackPreserveSemantics() = runBlocking {
+    fun coalescingRetryAndCrashRollbackPreserveSemantics() = runBlocking<Unit> {
         val task = TaskEntity(title = "v1")
         repo.create(task)
         repo.edit(task.copy(title = "v2"), emptySet())

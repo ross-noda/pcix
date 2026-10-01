@@ -1,19 +1,9 @@
-# Backend e fasi successive
+# Backend Supabase
 
-Il repository non contiene un backend. Non sono presenti URL inventati, login simulati,
-credenziali o sincronizzazione fittizia. Il core funziona offline e non richiede un account.
+La procedura operativa unica è [CLOUD_SETUP.md](CLOUD_SETUP.md). Il backend è Supabase Auth + PostgreSQL/RLS + tre RPC del protocollo sync + Edge Function delete-account.
 
-The Kotlin client would have pulled Ktor into AGP 9.3 / Compose; the app uses a thin OkHttp wrapper around the official GoTrue and PostgREST HTTP APIs instead.
+Il client usa il wrapper OkHttp già presente; non sono stati introdotti endpoint backend inventati o nuove librerie per sostituire il flusso esistente. Configurazione pubblica tramite local.properties → BuildConfig. Le nuove publishable key viaggiano nell'header apikey; non vengono usate come finti bearer JWT nelle chiamate Auth.
 
-Per attivarla serviranno:
-- Backend HTTPS con /auth/register, /auth/login, /auth/google, /auth/refresh, /sync,
-  /sync/batch e DELETE /account.
-- Contratto versionato per revisioni server, cursore di sincronizzazione e tombstone.
-- ID operazione idempotente, revisione attesa e risposta esplicita ai conflitti.
-- Client OAuth Android/web configurati per Credential Manager e verifica server dell'ID token Google.
-- Sessione custom JWT; nessuna combinazione con Firebase Authentication.
-- Access token in memoria; eventuale refresh token persistente protetto tramite Android Keystore
-  e primitive di piattaforma, senza EncryptedSharedPreferences o crittografia inventata.
-- Outbox Room transazionale e worker con backoff; UI sempre osservatrice di Room.
+Applica migration 0001, 0002, 0003, 0004 in ordine. La 0004 ammette la riassociazione esplicita task-tag soltanto dopo aver osservato la versione esatta della cancellazione; le altre identità tombstonate restano terminali. Le RPC ricavano sempre user_id da auth.uid(), non dal payload client.
 
-Non è ancora implementata alcuna memorizzazione di token: non esiste una sessione cloud.
+Test SQL in supabase/tests. Stato e risultati effettivi in VERIFICATION.md: nessun deployment reale è implicato dalla presenza dei file SQL.

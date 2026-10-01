@@ -24,7 +24,7 @@ class TaskSharingTest {
             null,
             ListEntity(id = INBOX_ID, name = "Inbox"),
             listOf(TagEntity(name = "Focus", normalizedName = "focus")),
-            listOf(SubtaskEntity(taskId = "t", title = "Finito", isCompleted = true)),
+            listOf(TaskEntity(parentTaskId = "t", title = "Finito", isCompleted = true)),
         )
 
     @Test

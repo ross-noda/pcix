@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,189 +29,55 @@ import com.example.pix.cloud.GoogleSignInHelper
 import kotlinx.coroutines.launch
 
 @Composable
-fun AuthScreen() {
+fun AuthScreen(model: AuthFormViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
     val context = LocalContext.current
     val app = context.applicationContext as PixApplication
     val state by app.auth.state.collectAsState()
-    val scope = rememberCoroutineScope()
-    var register by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    var recover by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
-    var message by remember { mutableIntStateOf(0) }
+    val awaiting = state as? AuthState.AwaitingEmail
     val keyboard = LocalSoftwareKeyboardController.current
-    val configured = app.cloud.configured
-    fun submit() {
-        if (busy) return
-        if (email.isBlank() || !email.contains('@')) {
-            message = R.string.auth_invalid_email
-            return
-        }
-        if (register && password != confirm) {
-            message = R.string.auth_password_mismatch
-            return
-        }
-        if (password.length < 6) {
-            message = R.string.auth_weak_password
-            return
-        }
-        busy = true
-        message = 0
-        keyboard?.hide()
-        scope.launch {
-            val result =
-                if (register) app.auth.signUp(email, password) else app.auth.signIn(email, password)
-            busy = false
-            result.exceptionOrNull()?.let {
-                message = (app.auth.state.value as? AuthState.Error)?.messageRes ?: R.string.auth_generic
-            }
-            if (register && result.isSuccess && app.auth.state.value is AuthState.Unauthenticated) {
-                message = R.string.auth_verify_email
-            }
-        }
-    }
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        BrandWordmark(Modifier.padding(bottom = 8.dp).semantics { heading() })
-        Text(
-            stringResource(R.string.auth_tagline),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(24.dp))
-        if (!configured) {
-            Text(
-                stringResource(R.string.cloud_missing_config),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(16.dp))
-        }
-        OutlinedTextField(
-            email,
-            { email = it },
-            label = { Text(stringResource(R.string.email)) },
-            singleLine = true,
-            keyboardOptions =
-                KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "email" },
-        )
-        if (!recover) {
-            OutlinedTextField(
-                password,
-                { password = it },
-                label = { Text(stringResource(R.string.password)) },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions =
-                    KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = if (register) ImeAction.Next else ImeAction.Done,
-                    ),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
-        }
-        if (register && !recover) {
-            OutlinedTextField(
-                confirm,
-                { confirm = it },
-                label = { Text(stringResource(R.string.confirm_password)) },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions =
-                    KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
-        }
-        val error = (state as? AuthState.Error)?.messageRes
-        if (message != 0)
-            Text(
-                stringResource(message),
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
-            )
-        else if (error != null && error != message)
-            Text(
-                stringResource(error),
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
-            )
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 16.dp))
-        Button(
-            onClick = {
-                if (recover) {
-                    if (email.isBlank() || !email.contains('@')) {
-                        message = R.string.auth_invalid_email
-                    } else {
-                        busy = true
-                        message = 0
-                        scope.launch {
-                            val result = app.auth.recover(email)
-                            busy = false
-                            message =
-                                if (result.isSuccess) R.string.auth_recover_sent
-                                else (result.exceptionOrNull() as? AuthException)?.messageRes
-                                    ?: (app.auth.state.value as? AuthState.Error)?.messageRes
-                                    ?: R.string.auth_generic
-                        }
-                    }
-                } else submit()
-            },
-            enabled = configured && !busy,
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 48.dp),
-        ) {
-            Text(
-                stringResource(
-                    when {
-                        recover -> R.string.auth_send_reset
-                        register -> R.string.auth_register
-                        else -> R.string.auth_login
-                    }
-                )
-            )
-        }
-        TextButton(
-            onClick = {
-                recover = false
-                register = !register
-                message = 0
-            }
-        ) {
-            Text(stringResource(if (register) R.string.auth_have_account else R.string.auth_need_account))
-        }
-        TextButton(onClick = { recover = !recover }) {
-            Text(stringResource(if (recover) R.string.auth_back_login else R.string.auth_forgot))
-        }
-        OutlinedButton(
-            onClick = {
-                val activity = context as? Activity ?: return@OutlinedButton
-                busy = true
-                message = 0
-                scope.launch {
-                    runCatching {
-                            val helper = GoogleSignInHelper(app.cloud)
-                            val token = helper.token(activity)
-                            app.auth.signInGoogle(token.idToken, token.nonce)
-                        }
-                        .onFailure {
-                            message = R.string.auth_google_failed
-                        }
-                    busy = false
+    fun submit() { keyboard?.hide(); model.submit() }
+    Surface(color=MaterialTheme.colorScheme.background,contentColor=MaterialTheme.colorScheme.onBackground) {
+        Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
+            BrandWordmark(Modifier.padding(bottom=8.dp).semantics {heading()})
+            Text(stringResource(R.string.auth_tagline),style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(24.dp))
+            if(!app.cloud.configured) Text(stringResource(R.string.cloud_missing_config),color=MaterialTheme.colorScheme.error)
+            if(awaiting!=null) {
+                Text(stringResource(R.string.auth_check_email),style=MaterialTheme.typography.headlineSmall,modifier=Modifier.semantics {heading()})
+                Text(stringResource(R.string.auth_email_sent_to,awaiting.email),Modifier.padding(vertical=16.dp))
+                Text(stringResource(R.string.auth_verify_email),color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick={model.resend(awaiting.email)},enabled=!model.busy,modifier=Modifier.fillMaxWidth().padding(top=16.dp)) {Text(stringResource(R.string.auth_resend))}
+                TextButton(onClick={model.email=awaiting.email;model.loginMode()},enabled=!model.busy) {Text(stringResource(R.string.auth_back_login))}
+            } else {
+                OutlinedTextField(model.email,{model.email=it},label={Text(stringResource(R.string.email))},enabled=!model.busy,singleLine=true,
+                    keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Email,imeAction=ImeAction.Next),modifier=Modifier.fillMaxWidth().semantics {contentDescription="email"})
+                if(!model.recover) AuthPasswordField(model.password,{model.password=it},R.string.password,!model.busy,if(model.register) ImeAction.Next else ImeAction.Done,::submit)
+                if(model.register && !model.recover) AuthPasswordField(model.confirm,{model.confirm=it},R.string.confirm_password,!model.busy,ImeAction.Done,::submit)
+                Button(onClick=::submit,enabled=app.cloud.configured && !model.busy,modifier=Modifier.fillMaxWidth().padding(top=16.dp).heightIn(min=48.dp)) {
+                    Text(stringResource(when {model.recover->R.string.auth_send_reset;model.register->R.string.auth_register;else->R.string.auth_login}))
                 }
-            },
-            enabled = configured && app.cloud.googleConfigured && !busy,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        ) {
-            Text(stringResource(R.string.auth_google))
+                val error=(state as? AuthState.Error)?.messageRes
+                if(error==R.string.auth_email_unconfirmed || error==R.string.auth_invalid_callback) TextButton(onClick={model.resend()},enabled=!model.busy) {Text(stringResource(R.string.auth_resend))}
+                TextButton(onClick=model::toggleRegistration,enabled=!model.busy) {Text(stringResource(if(model.register) R.string.auth_have_account else R.string.auth_need_account))}
+                TextButton(onClick=model::toggleRecovery,enabled=!model.busy) {Text(stringResource(if(model.recover) R.string.auth_back_login else R.string.auth_forgot))}
+                OutlinedButton(onClick={(context as? Activity)?.let(model::google)},enabled=app.cloud.configured && !model.busy,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Text(stringResource(R.string.auth_google))}
+            }
+            val message=model.message.takeIf {it!=0} ?: (state as? AuthState.Error)?.messageRes
+            if(message!=null) Text(stringResource(message),color=if(model.success) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                modifier=Modifier.fillMaxWidth().padding(top=12.dp).semantics {liveRegion=androidx.compose.ui.semantics.LiveRegionMode.Polite})
+            if(model.busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top=16.dp))
         }
     }
+}
+
+@Composable
+private fun AuthPasswordField(value:String,change:(String)->Unit,label:Int,enabled:Boolean,action:ImeAction,submit:()->Unit) {
+    var visible by remember {mutableStateOf(false)}
+    OutlinedTextField(value,change,label={Text(stringResource(label))},singleLine=true,enabled=enabled,
+        visualTransformation=if(visible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon={TextButton(onClick={visible=!visible}) {Text(stringResource(if(visible) R.string.auth_hide_password else R.string.auth_show_password))}},
+        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,imeAction=action),keyboardActions=KeyboardActions(onDone={submit()}),modifier=Modifier.fillMaxWidth().padding(top=8.dp))
 }
 
 @Composable

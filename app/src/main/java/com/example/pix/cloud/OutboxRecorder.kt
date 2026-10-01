@@ -19,7 +19,6 @@ class OutboxRecorder(private val db: PixDatabase) {
         val lists: Map<String, ListEntity>,
         val tags: Map<String, TagEntity>,
         val tasks: Map<String, TaskEntity>,
-        val subtasks: Map<String, SubtaskEntity>,
         val series: Map<String, RecurringSeriesEntity>,
         val links: Set<String>,
         val images: Map<String, TaskImage>,
@@ -35,7 +34,6 @@ class OutboxRecorder(private val db: PixDatabase) {
             lists = dao.syncLists().associateBy { it.id },
             tags = dao.syncTags().associateBy { it.id },
             tasks = dao.syncTasks().associateBy { it.id },
-            subtasks = dao.syncSubtasks().associateBy { it.id },
             series = dao.syncSeries().associateBy { it.id },
             links = dao.tagLinks().map { linkId(it.taskId, it.tagId) }.toSet(),
             images = dao.syncImages().associateBy { it.id },
@@ -46,17 +44,19 @@ class OutboxRecorder(private val db: PixDatabase) {
         diff(before.lists, after.lists, "lists") { SyncCodec.list(it).toString() }
         diff(before.tags, after.tags, "tags") { SyncCodec.tag(it).toString() }
         diff(before.tasks, after.tasks, "tasks") { SyncCodec.task(it).toString() }
-        diff(before.subtasks, after.subtasks, "subtasks") { SyncCodec.subtask(it).toString() }
         diff(before.series, after.series, "recurring_series") { SyncCodec.series(it).toString() }
 
         val now = System.currentTimeMillis()
         (after.links - before.links).forEach { id ->
             val (taskId, tagId) = id.split('|', limit = 2)
+            val payload = SyncCodec.tagLink(TagLink(taskId, tagId), now)
+            // A link has a composite identity, so explicit re-attach cannot mint a new UUID.
+            outbox.deletedLinkVersion(id)?.let { payload.put("restore_after_version", it) }
             enqueue(
                 "task_tags",
                 id,
                 UPSERT,
-                SyncCodec.tagLink(TagLink(taskId, tagId), now).toString(),
+                payload.toString(),
             )
         }
         (before.links - after.links).forEach { enqueue("task_tags", it, DELETE, "{}") }
@@ -66,7 +66,6 @@ class OutboxRecorder(private val db: PixDatabase) {
     suspend fun enqueueAll() {
         val empty =
             Snapshot(
-                emptyMap(),
                 emptyMap(),
                 emptyMap(),
                 emptyMap(),

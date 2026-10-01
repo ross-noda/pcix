@@ -27,11 +27,13 @@ data class ListEntity(
                 parentColumns = ["id"],
                 childColumns = ["listId"],
                 onDelete = ForeignKey.RESTRICT,
-            )
+            ),
+            ForeignKey(entity = TaskEntity::class, parentColumns = ["id"], childColumns = ["parentTaskId"], onDelete = ForeignKey.SET_NULL, deferred = true)
         ],
     indices =
         [
             Index("listId"),
+            Index("parentTaskId"),
             Index("dueDay"),
             Index("isCompleted"),
             Index(value = ["seriesId", "originalDay"], unique = true),
@@ -41,6 +43,7 @@ data class TaskEntity(
     @PrimaryKey val id: String = newId(),
     val title: String,
     val notes: String = "",
+    val parentTaskId: String? = null,
     val listId: String = INBOX_ID,
     val dueDay: Long? = null,
     val minuteOfDay: Int? = null,
@@ -91,29 +94,6 @@ data class TagEntity(
 )
 data class TaskTagCrossRef(val taskId: String, val tagId: String)
 
-@Entity(
-    tableName = "subtasks",
-    foreignKeys =
-        [
-            ForeignKey(
-                entity = TaskEntity::class,
-                parentColumns = ["id"],
-                childColumns = ["taskId"],
-                onDelete = ForeignKey.CASCADE,
-            )
-        ],
-    indices = [Index("taskId")],
-)
-data class SubtaskEntity(
-    @PrimaryKey val id: String = newId(),
-    val taskId: String,
-    val title: String,
-    val isCompleted: Boolean = false,
-    val sortOrder: Long = System.currentTimeMillis(),
-    val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis(),
-)
-
 data class TaskWithDetails(
     @Embedded val task: TaskEntity,
     @Relation(parentColumn = "seriesId", entityColumn = "id") val series: RecurringSeriesEntity?,
@@ -125,10 +105,13 @@ data class TaskWithDetails(
             Junction(TaskTagCrossRef::class, parentColumn = "taskId", entityColumn = "tagId"),
     )
     val tags: List<TagEntity>,
-    @Relation(parentColumn = "id", entityColumn = "taskId") val subtasks: List<SubtaskEntity>,
+    @Relation(parentColumn = "id", entityColumn = "parentTaskId") val children: List<TaskEntity>,
+    @Relation(parentColumn = "parentTaskId", entityColumn = "id") val parent: TaskEntity? = null,
     @Relation(parentColumn = "id", entityColumn = "taskId")
     val images: List<TaskImage> = emptyList(),
-)
+) {
+    @get:Ignore val visibleChildren: List<TaskEntity> get() = children.filterNot { it.isTemplate || it.isSkipped }
+}
 
 data class ListWithCount(@Embedded val list: ListEntity, val activeCount: Int)
 

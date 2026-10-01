@@ -1,6 +1,7 @@
 package com.example.pix
 
 import android.content.Intent
+import androidx.compose.foundation.layout.fillMaxSize
 import android.os.Bundle
 import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
@@ -11,6 +12,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -38,8 +42,15 @@ class MainActivity : ComponentActivity() {
         handleAuthIntent(intent)
         setContent {
             val app = application as PixApplication
-            val model: TasksViewModel = viewModel()
-            LaunchedEffect(Unit) { handleWidgetIntent(intent, model) }
+            val sessionState by app.session.state.collectAsStateWithLifecycle()
+            // Keep drafts across activity recreation, but discard caches when the account changes.
+            val modelAccount = (sessionState as? AccountSessionState.Ready)?.user?.id ?: "local-or-signed-out"
+            val accountModels: AccountViewModelStore = viewModel()
+            val modelOwner = accountModels.forAccount(modelAccount)
+            val model: TasksViewModel = viewModel(viewModelStoreOwner = modelOwner,
+                key = "tasks:$modelAccount",
+                factory = defaultViewModelProviderFactory, extras = defaultViewModelCreationExtras)
+            LaunchedEffect(model) { handleWidgetIntent(intent, model) }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(lifecycle, model) {
                 val observer = LifecycleEventObserver { _, event ->
@@ -73,7 +84,11 @@ class MainActivity : ComponentActivity() {
                 textSize = textSize.value,
                 fontStyle = fontStyle.value,
             ) {
-                val sessionState by app.session.state.collectAsStateWithLifecycle()
+                androidx.compose.material3.Surface(
+                    modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.background,
+                    contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+                ) {
                 when {
                     !app.cloud.configured -> PixApp(model)
                     sessionState is AccountSessionState.Restoring ||
@@ -84,6 +99,7 @@ class MainActivity : ComponentActivity() {
                     sessionState is AccountSessionState.Error ->
                         SessionErrorScreen((sessionState as AccountSessionState.Error).messageRes)
                     sessionState is AccountSessionState.Ready -> PixApp(model)
+                }
                 }
             }
         }
@@ -120,10 +136,27 @@ class MainActivity : ComponentActivity() {
         val data = intent?.data?.toString() ?: return
         if (!data.startsWith("com.example.pix://auth")) return
         val app = application as PixApplication
-        app.backgroundScope.launchCatching { app.auth.handleDeeplink(data) }
+        intent.data = null
+        app.backgroundScope.launch { app.auth.handleDeeplink(data) }
     }
 }
 
 private fun kotlinx.coroutines.CoroutineScope.launchCatching(block: suspend () -> Unit) {
     launch { runCatching { block() } }
+}
+
+/** Activity-retained owner; a session transition clears only the former account's models. */
+class AccountViewModelStore : ViewModel(), ViewModelStoreOwner {
+    override val viewModelStore = ViewModelStore()
+    private var account: String? = null
+
+    fun forAccount(id: String): ViewModelStoreOwner {
+        if (account != id) {
+            viewModelStore.clear()
+            account = id
+        }
+        return this
+    }
+
+    override fun onCleared() { viewModelStore.clear() }
 }

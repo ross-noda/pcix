@@ -21,6 +21,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import com.example.pix.cloud.CloudSyncWork
 
 @Composable
 fun AccountStatusLine() {
@@ -206,6 +209,7 @@ fun AccountSettings(model: TasksViewModel) {
                         scope.launch {
                             pending = true
                             accountError = 0
+                            model.flushAndAwait()
                             when (val outcome = app.accountLifecycle.logout()) {
                                 com.example.pix.cloud.LogoutOutcome.Completed -> Unit
                                 is com.example.pix.cloud.LogoutOutcome.NeedsPendingConfirmation ->
@@ -238,6 +242,7 @@ fun AccountSettings(model: TasksViewModel) {
                         scope.launch {
                             pending = true
                             accountError = 0
+                            model.flushAndAwait()
                             when (val outcome = app.accountLifecycle.deleteAccount()) {
                                 com.example.pix.cloud.DeleteOutcome.Completed -> Unit
                                 is com.example.pix.cloud.DeleteOutcome.Failed ->
@@ -308,13 +313,20 @@ fun DataSyncSettings() {
     val app = context.applicationContext as PixApplication
     val status by app.sync.status.collectAsState()
     val last by app.sync.lastSuccess.collectAsState()
-    val scope = rememberCoroutineScope()
+    val work by remember { WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow("cloud-sync") }.collectAsState(initial = emptyList())
+    val queued = work.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
+    var submitting by remember { mutableStateOf(false) }
+    var enqueueError by remember { mutableStateOf(false) }
     val label =
         when (status) {
             CloudSyncStatus.Syncing -> stringResource(R.string.sync_syncing)
             CloudSyncStatus.Offline -> stringResource(R.string.sync_offline)
             CloudSyncStatus.Error -> stringResource(R.string.sync_error)
             CloudSyncStatus.Unconfigured -> stringResource(R.string.cloud_missing_config)
+            CloudSyncStatus.SchemaMissing -> stringResource(R.string.sync_schema_missing)
+            CloudSyncStatus.Forbidden -> stringResource(R.string.sync_forbidden)
+            CloudSyncStatus.InvalidData -> stringResource(R.string.sync_invalid_data)
+            CloudSyncStatus.SessionExpired -> stringResource(R.string.auth_session_expired)
             CloudSyncStatus.Idle ->
                 if (last == 0L) stringResource(R.string.sync_idle)
                 else
@@ -327,12 +339,20 @@ fun DataSyncSettings() {
         }
     Surface(shape = MaterialTheme.shapes.large) {
         Column {
+            Text(stringResource(R.string.sync_coverage), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
             ListItem(
                 headlineContent = { Text(stringResource(R.string.sync_now)) },
-                supportingContent = { Text(label) },
+                supportingContent = { Text(if (enqueueError) stringResource(R.string.sync_enqueue_failed) else if (queued && status == CloudSyncStatus.Idle) stringResource(R.string.sync_queued) else label) },
                 modifier =
-                    Modifier.clickable(enabled = app.cloud.configured) {
-                        scope.launch { app.sync.synchronize() }
+                    Modifier.clickable(enabled = app.cloud.configured && status != CloudSyncStatus.Syncing && !submitting) {
+                        submitting = true
+                        enqueueError = false
+                        app.backgroundScope.launch {
+                            try { CloudSyncWork.requestNow(app) }
+                            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                            catch (_: Exception) { enqueueError = true }
+                            finally { submitting = false }
+                        }
                     },
             )
         }

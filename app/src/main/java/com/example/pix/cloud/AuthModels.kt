@@ -5,6 +5,8 @@ sealed class AuthState {
 
     data object Unauthenticated : AuthState()
 
+    data class AwaitingEmail(val email: String) : AuthState()
+
     data class Authenticated(val user: PcixUser, val offline: Boolean = false) : AuthState()
 
     data class PasswordRecovery(val user: PcixUser) : AuthState()
@@ -31,6 +33,10 @@ object AuthErrors {
         val lower = body.lowercase()
         return when {
             status == 0 -> com.example.pix.R.string.auth_offline
+            "email_not_confirmed" in lower -> com.example.pix.R.string.auth_email_unconfirmed
+            "provider_disabled" in lower || "provider is not enabled" in lower || "unsupported provider" in lower -> com.example.pix.R.string.auth_google_provider
+            "bad_jwt" in lower || "invalid id token" in lower || "nonce" in lower -> com.example.pix.R.string.auth_google_token
+            "flow_state" in lower || "otp_expired" in lower || "bad_code_verifier" in lower -> com.example.pix.R.string.auth_invalid_callback
             status == 401 -> com.example.pix.R.string.auth_session_expired
             "reauthentication_needed" in lower -> com.example.pix.R.string.auth_reauthentication_required
             "reauthentication_not_valid" in lower -> com.example.pix.R.string.auth_reauthentication_invalid

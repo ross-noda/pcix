@@ -78,3 +78,7 @@ Il receipt di una nuova mutazione memorizza anche un hash della richiesta. Lo st
 ### Verifica
 
 Gli assertion SQL sono in `supabase/tests/`. Verificano schema, RLS/privilegi, ownership trusted delle RPC, FK/indici, integrità live-parent, copertura tombstone e isolamento tra due utenti. In assenza di un progetto Supabase collegato, questi test restano **da eseguire**: non va considerato verificato il comportamento reale di Postgres/PostgREST finché non vengono lanciati contro lo stack effettivo.
+
+## Audit corrente
+
+Per le correzioni ad ACK, riassociazione tag e transizioni account vedere SYNC_PROTOCOL.md. Per Google Calendar vedere ARCHITECTURE.md: paginazione completa, commit atomico per calendario, cache conservata se il full refresh HTTP410 fallisce. L'integrazione reale con i provider rimane da verificare.

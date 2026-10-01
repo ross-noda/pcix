@@ -138,7 +138,7 @@ class CalendarWidgetDataSource(private val context: Context) {
     private fun TaskWithDetails.toWidgetTask(selectedDay: Long, locale: Locale): CalendarWidgetTask =
         CalendarWidgetTask(
             id = task.id,
-            title = task.title,
+            title = (if(task.parentTaskId!=null) "↳ " else "") + task.title,
             timeLabel =
                 if (task.dueDay == selectedDay && task.minuteOfDay != null) {
                     LocalTime.of(task.minuteOfDay / 60, task.minuteOfDay % 60)

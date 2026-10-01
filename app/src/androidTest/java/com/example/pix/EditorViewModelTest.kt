@@ -22,6 +22,7 @@ class EditorViewModelTest {
                     dueDay = LocalDate.now().toEpochDay(),
                     minuteOfDay = 600,
                 )
+            val notes = "## Live Markdown\n\n" + "- [ ] Keep every character\n".repeat(120)
             val store = ViewModelStore()
             lateinit var model: TasksViewModel
             app.repository.create(task)
@@ -35,16 +36,17 @@ class EditorViewModelTest {
                         model.draft.value!!.let { it.copy(task = it.task.copy(title = "Changed")) }
                     )
                     model.edit(
-                        model.draft.value!!.let { it.copy(task = it.task.copy(notes = "Note")) }
+                        model.draft.value!!.let { it.copy(task = it.task.copy(notes = notes)) }
                     )
                     model.complete(task, true)
                     model.close()
                 }
                 withTimeout(5000) {
-                    while (app.repository.details(task.id)?.task?.notes != "Note") delay(30)
+                    while (app.repository.details(task.id)?.task?.notes != notes) delay(30)
                 }
                 val updated = app.repository.details(task.id)!!.task
                 assertEquals("Changed", updated.title)
+                assertEquals(notes, updated.notes)
                 assertTrue(updated.isCompleted)
                 app.repository.complete(task.id, false)
                 val fresh = app.repository.details(task.id)!!

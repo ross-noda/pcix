@@ -2,6 +2,7 @@ package com.example.pix.cloud
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.example.pix.saveChildForTest
 import com.example.pix.data.*
 import java.io.IOException
 import kotlinx.coroutines.runBlocking
@@ -18,6 +19,124 @@ class SyncEngineProtocolTest {
     fun closeDatabases() {
         databases.forEach { it.close() }
         databases.clear()
+    }
+
+    @Test fun stoppedWorkerKeepsOutboxAndDoesNotLeaveSyncingStatus() = runBlocking {
+        val db = newDb()
+        TaskRepository(db).create(task("stop", "Pending"))
+        val pending = db.syncDao().pending().map { it.id }
+        val remote = object : SyncRemote by FakeServer() {
+            override suspend fun push(token: String, row: SyncOutboxEntity): PushAck =
+                throw kotlinx.coroutines.CancellationException("Worker stopped")
+        }
+        val engine = SyncEngine(db, authenticatedAuth(), remote) {}
+        try { engine.synchronize(); fail("Cancellation must propagate") }
+        catch (_: kotlinx.coroutines.CancellationException) { }
+        assertEquals(CloudSyncStatus.Error, engine.status.value)
+        assertEquals(CloudSyncStatus.Error.name, db.syncDao().state(user.id)!!.status)
+        assertEquals(0L, engine.lastSuccess.value)
+        assertEquals(pending, db.syncDao().pending().map { it.id })
+    }
+
+    @Test fun twoLocalDevicesConvergeAfterOfflineCreateUpdatesInBothDirectionsAndDelete() = runBlocking {
+        val server = FakeServer()
+        val a = newDb(); val b = newDb()
+        val repoA = TaskRepository(a); val repoB = TaskRepository(b)
+        val syncA = SyncEngine(a, authenticatedAuth(), server) {}
+        val syncB = SyncEngine(b, authenticatedAuth(), server) {}
+        val tag = repoA.saveTag("Shared", 2)
+        val task = task("round-trip", "Created offline").copy(notes = "## Notes\n- [ ] One", durationMinutes = 45, dueDay = 24000, minuteOfDay = 600,
+            matrixUrgent = true, matrixImportant = false, sortOrder = 123)
+        repoA.create(task, setOf(tag))
+        assertNotNull(a.dao().task(task.id))
+        assertTrue(a.syncDao().pending().isNotEmpty())
+        assertTrue(syncA.synchronize()); assertTrue(syncB.synchronize())
+        assertEquals(task.notes, b.dao().task(task.id)!!.notes)
+        assertEquals(45, b.dao().task(task.id)!!.durationMinutes)
+        assertEquals(false, b.dao().task(task.id)!!.matrixImportant)
+        assertEquals(setOf(tag), b.dao().tagIds(task.id).toSet())
+        repoA.edit(a.dao().task(task.id)!!.copy(title = "A update"), setOf(tag))
+        assertTrue(syncA.synchronize()); assertTrue(syncB.synchronize())
+        assertEquals("A update", b.dao().task(task.id)!!.title)
+        repoB.edit(b.dao().task(task.id)!!.copy(title = "B update", notes = "- [x] One"), setOf(tag))
+        assertTrue(syncB.synchronize()); assertTrue(syncA.synchronize())
+        assertEquals("B update", a.dao().task(task.id)!!.title)
+        assertEquals("- [x] One", a.dao().task(task.id)!!.notes)
+        repoA.delete(task.id)
+        assertTrue(syncA.synchronize()); assertTrue(syncB.synchronize())
+        assertNull(a.dao().task(task.id)); assertNull(b.dao().task(task.id))
+    }
+
+    @Test fun permanentServerFailureKeepsPendingMutationAndLastSuccessAcrossRestart() = runBlocking {
+        val db = newDb()
+        val server = FakeServer()
+        val auth = authenticatedAuth()
+        val repo = TaskRepository(db)
+        val good = SyncEngine(db, auth, server) {}
+        assertTrue(good.synchronize())
+        val last = good.lastSuccess.value
+        repo.create(task("pending-config", "Keep this offline edit"))
+        val pending = db.syncDao().pending().map { it.id }
+        val failing = object : SyncRemote by server {
+            override suspend fun push(token: String, row: SyncOutboxEntity): PushAck =
+                throw SyncHttpFailure("push", 404, "PGRST202")
+        }
+        val engine = SyncEngine(db, auth, failing) {}
+        assertFalse(engine.synchronize())
+        assertEquals(CloudSyncStatus.SchemaMissing, engine.status.value)
+        assertEquals(last, engine.lastSuccess.value)
+        assertEquals(pending, db.syncDao().pending().map { it.id })
+        assertEquals("Keep this offline edit", db.dao().task("pending-config")!!.title)
+        val restarted = SyncEngine(db, auth, server) {}
+        restarted.restoreForAccount(user.id)
+        assertEquals(CloudSyncStatus.SchemaMissing, restarted.status.value)
+        assertTrue(restarted.synchronize())
+        assertTrue(db.syncDao().pending().isEmpty())
+    }
+
+    @Test
+    fun acknowledgedCanonicalPayloadIsStillAppliedByPull() = runBlocking {
+        val db = newDb()
+        val repository = TaskRepository(db)
+        val server = FakeServer()
+        val task = task("canonical", "local")
+        repository.create(task)
+        server.beforeReturn = { row ->
+            if (row.entityType == "tasks") server.changes.last().payload!!.put("title", "canonical server value")
+        }
+        assertTrue(SyncEngine(db, authenticatedAuth(), server) {}.synchronize())
+        assertEquals("canonical server value", db.dao().task(task.id)!!.title)
+    }
+
+    @Test
+    fun canonicalParentUpdatesPreserveChildrenAndLinks() = runBlocking {
+        val db = newDb()
+        val repo = TaskRepository(db)
+        val task = task("parent-graph", "before")
+        repo.create(task)
+        val sub = TaskEntity(parentTaskId = task.id, title = "child")
+        repo.saveChildForTest(sub)
+        val tag = repo.saveTag("linked", 1)
+        repo.edit(task, setOf(tag))
+        val server = FakeServer()
+        val engine = SyncEngine(db, authenticatedAuth(), server) {}
+        assertTrue(engine.synchronize())
+        server.seedUpsert("tasks", task.id, SyncCodec.task(task.copy(title = "after")))
+        server.seedUpsert("tags", tag, SyncCodec.tag(db.dao().tagById(tag)!!.copy(name = "renamed", normalizedName = "renamed")))
+        assertTrue(engine.synchronize())
+        assertEquals(1, db.dao().children(task.id).size)
+        assertEquals(1, db.dao().tagIds(task.id).size)
+    }
+
+    @Test
+    fun accountPreparationBlocksRemoteAccess() = runBlocking {
+        val db = newDb()
+        val server = FakeServer()
+        TaskRepository(db).create(task("pending", "stay local"))
+        val engine = SyncEngine(db, authenticatedAuth(), server, accountReady = { false }) {}
+        assertFalse(engine.synchronize())
+        assertTrue(server.pushOrder.isEmpty())
+        assertTrue(db.syncDao().pending().isNotEmpty())
     }
 
     @Test
@@ -79,14 +198,14 @@ class SyncEngineProtocolTest {
 
         assertFalse(engine.synchronize())
         assertNull(db.syncDao().state(user.id)!!.checkpoint)
-        assertNotNull(db.dao().task("remote-0"))
-        assertNotNull(db.dao().task("remote-1"))
+        assertNull(db.dao().task("remote-0"))
+        assertNull(db.dao().task("remote-1"))
         assertNull(db.dao().task("remote-2"))
 
         assertTrue(engine.synchronize())
         assertEquals(server.version.toString(), db.syncDao().state(user.id)!!.checkpoint)
         assertEquals(3, listOf("remote-0", "remote-1", "remote-2").count { db.dao().task(it) != null })
-        assertTrue(reminderReconciliations >= 2)
+        assertTrue(reminderReconciliations >= 1)
         assertEquals(3, db.syncDao().versions(user.id).count { it.entityType == "tasks" })
     }
 
@@ -129,7 +248,7 @@ class SyncEngineProtocolTest {
         val engine = SyncEngine(db, authenticatedAuth(), server) {}
 
         assertFalse(engine.synchronize())
-        assertEquals(CloudSyncStatus.Error, engine.status.value)
+        assertEquals(CloudSyncStatus.InvalidData, engine.status.value)
         assertNull(db.syncDao().state(user.id)!!.checkpoint)
         assertNull(db.dao().task("malformed"))
         assertNull(db.syncDao().version(user.id, "tasks", "malformed"))
@@ -192,7 +311,7 @@ class SyncEngineProtocolTest {
         assertNull(dbA.dao().task(id))
         assertNull(dbB.dao().task(id))
         assertTrue(dbA.syncDao().pendingFor("tasks", id).isEmpty())
-        assertTrue(server.tombstones.containsKey("tasks|$id"))
+        assertTrue(server.tombstones.containsKey("tasks|$id|"))
     }
 
     @Test
@@ -260,8 +379,27 @@ class SyncEngineProtocolTest {
 
         assertFalse(engine.synchronize())
         assertEquals(AuthState.Unauthenticated, auth.state.value)
-        assertEquals(CloudSyncStatus.Error, engine.status.value)
-        assertEquals(CloudSyncStatus.Error.name, db.syncDao().state(user.id)!!.status)
+        assertEquals(CloudSyncStatus.SessionExpired, engine.status.value)
+        assertEquals(CloudSyncStatus.SessionExpired.name, db.syncDao().state(user.id)!!.status)
+    }
+
+    @Test
+    fun hierarchyOfflinePushOrdersParentBeforeChildAndPullResolvesLaterParent() = runBlocking {
+        val db=newDb();val repo=TaskRepository(db);val server=FakeServer(pageSize=1)
+        val parent=task("z-parent","Parent");repo.create(parent)
+        val child=task("a-child","Child").copy(parentTaskId=parent.id,createdAt=1)
+        repo.create(child)
+        assertTrue(SyncEngine(db,authenticatedAuth(),server) {}.synchronize())
+        assertTrue(server.pushOrder.indexOf("tasks:z-parent")<server.pushOrder.indexOf("tasks:a-child"))
+        val fresh=newDb();val late=FakeServer(pageSize=1)
+        late.seedUpsert("tasks",child.id,SyncCodec.task(child))
+        late.seedUpsert("tasks",parent.id,SyncCodec.task(parent))
+        val engine=SyncEngine(fresh,authenticatedAuth(),late) {}
+        assertTrue(engine.synchronize())
+        assertEquals(parent.id,fresh.dao().task(child.id)!!.parentTaskId)
+        late.seedDelete("tasks",parent.id)
+        assertTrue(engine.synchronize())
+        assertNull(fresh.dao().task(child.id)!!.parentTaskId)
     }
 
     private suspend fun newDb(): PixDatabase {
@@ -326,7 +464,13 @@ class SyncEngineProtocolTest {
         override fun read() = session
         override fun write(session: AuthSession) { this.session = session }
         override fun clear() { session = null; verifier = null }
-        override fun recoveryVerifier() = verifier
+        private var signupCode: String? = null
+    private var signupAddress: String? = null
+    override fun signupVerifier() = signupCode
+    override fun signupEmail() = signupAddress
+    override fun writeSignup(verifier: String, email: String) { signupCode = verifier; signupAddress = email }
+    override fun clearSignup() { signupCode = null; signupAddress = null }
+    override fun recoveryVerifier() = verifier
         override fun writeRecoveryVerifier(verifier: String) { this.verifier = verifier }
         override fun clearRecoveryVerifier() { verifier = null }
     }

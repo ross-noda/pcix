@@ -71,7 +71,7 @@ class RemoteDataSource(private val config: CloudConfig, private val http: CloudH
                 mapOf("Prefer" to "handling=strict"),
             )
         if (response.code == 401) throw Unauthorized()
-        if (!response.ok) throw IllegalStateException("push ${row.entityType} ${response.code}")
+        if (!response.ok) throw SyncHttpFailure.from("push:${row.entityType}", response)
         val json = runCatching { JSONObject(response.body) }.getOrElse { throw ProtocolError("invalid push ack") }
         return@withContext PushAck(
             mutationId = json.requireString("mutation_id"),
@@ -88,7 +88,7 @@ class RemoteDataSource(private val config: CloudConfig, private val http: CloudH
     override suspend fun snapshot(token: String): Long = withContext(Dispatchers.IO) {
         val response = http.request("POST", "/rest/v1/rpc/pcix_sync_snapshot", token, "{}")
         if (response.code == 401) throw Unauthorized()
-        if (!response.ok) throw IllegalStateException("snapshot ${response.code}")
+        if (!response.ok) throw SyncHttpFailure.from("snapshot", response)
         val json = runCatching { JSONObject(response.body) }.getOrElse { throw ProtocolError("invalid snapshot") }
         return@withContext json.requireNonNegativeLong("through")
     }
@@ -105,8 +105,8 @@ class RemoteDataSource(private val config: CloudConfig, private val http: CloudH
         val response =
             http.request("POST", "/rest/v1/rpc/pcix_pull_changes", token, body.toString())
         if (response.code == 401) throw Unauthorized()
-        if (!response.ok) throw IllegalStateException("pull ${response.code}")
-        val raw = SyncCodec.parseArray(response.body.ifBlank { "[]" })
+        if (!response.ok) throw SyncHttpFailure.from("pull", response)
+        val raw = SyncCodec.parseArray(response.body)
         var previous = after
         val rows =
             raw.map { json ->

@@ -73,7 +73,6 @@ class AccountStore(private val context: Context, private val db: PixDatabase) : 
             db.dao().clearReceipts()
             db.dao().clearImages()
             db.dao().clearTaskTags()
-            db.dao().clearAllSubtasks()
             db.dao().clearSeries()
             db.dao().clearTasks()
             db.dao().clearTags()

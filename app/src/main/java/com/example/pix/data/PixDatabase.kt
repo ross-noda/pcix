@@ -30,8 +30,6 @@ interface PixDao {
     )
     suspend fun rescheduleTask(id: String, day: Long, minute: Int?, duration: Int?, now: Long)
 
-    @Query("UPDATE subtasks SET sortOrder=:order, updatedAt=:now WHERE id=:id")
-    suspend fun setSubtaskOrder(id: String, order: Long, now: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertImage(image: TaskImage)
 
@@ -77,7 +75,6 @@ interface PixDao {
     )
     suspend fun deleteFuture(series: String, day: Long, exceptId: String)
 
-    @Query("DELETE FROM subtasks WHERE taskId=:id") suspend fun clearSubtasks(id: String)
 
     @Query(
         "SELECT * FROM tasks WHERE isTemplate=0 AND isSkipped=0 AND isCompleted = 0 AND dueDay IS NOT NULL AND minuteOfDay IS NOT NULL"
@@ -211,12 +208,20 @@ interface PixDao {
 
     @Query("DELETE FROM task_tags WHERE taskId=:id") suspend fun clearTags(id: String)
 
-    @Upsert suspend fun saveSubtask(subtask: SubtaskEntity)
+    @Query("SELECT * FROM tasks WHERE parentTaskId=:id AND isTemplate=0 AND isSkipped=0 ORDER BY isCompleted,sortOrder,id")
+    suspend fun children(id: String): List<TaskEntity>
 
-    @Query("DELETE FROM subtasks WHERE id=:id") suspend fun deleteSubtask(id: String)
+    @Query("SELECT COUNT(*) FROM tasks WHERE parentTaskId=:id")
+    suspend fun childCount(id: String): Int
 
-    @Query("SELECT * FROM subtasks WHERE taskId=:id ORDER BY isCompleted, sortOrder, id")
-    suspend fun subtasks(id: String): List<SubtaskEntity>
+    @Query("UPDATE tasks SET parentTaskId=:parent,updatedAt=:now WHERE id=:id")
+    suspend fun setParent(id: String, parent: String?, now: Long)
+
+    @Query("UPDATE tasks SET parentTaskId=NULL,updatedAt=:now WHERE parentTaskId=:id")
+    suspend fun detachChildren(id: String, now: Long)
+
+    @Query("SELECT * FROM tasks WHERE id!=:child AND parentTaskId IS NULL AND isTemplate=0 AND isSkipped=0 AND title LIKE :pattern ESCAPE '\' ORDER BY isCompleted,title COLLATE NOCASE LIMIT 100")
+    fun parentCandidates(child: String, pattern: String): Flow<List<TaskEntity>>
 
     @Query("SELECT tagId FROM task_tags WHERE taskId=:id")
     suspend fun tagIds(id: String): List<String>
@@ -233,7 +238,6 @@ interface PixDao {
 
     @Query("SELECT * FROM tasks") suspend fun syncTasks(): List<TaskEntity>
 
-    @Query("SELECT * FROM subtasks") suspend fun syncSubtasks(): List<SubtaskEntity>
 
     @Query("SELECT * FROM recurring_series") suspend fun syncSeries(): List<RecurringSeriesEntity>
 
@@ -241,7 +245,6 @@ interface PixDao {
 
     @Query("SELECT * FROM tags WHERE id=:id") suspend fun tagById(id: String): TagEntity?
 
-    @Query("SELECT * FROM subtasks WHERE id=:id") suspend fun subtaskById(id: String): SubtaskEntity?
 
     @Query("SELECT * FROM task_images WHERE id=:id") suspend fun imageById(id: String): TaskImage?
 
@@ -255,16 +258,14 @@ interface PixDao {
 
     @Query("SELECT COUNT(*) FROM tags") suspend fun tagCount(): Int
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun replaceList(list: ListEntity)
+    @Upsert suspend fun replaceList(list: ListEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun replaceTask(task: TaskEntity)
+    @Upsert suspend fun replaceTask(task: TaskEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun replaceTag(tag: TagEntity)
+    @Upsert suspend fun replaceTag(tag: TagEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun replaceSubtask(subtask: SubtaskEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun replaceSeries(series: RecurringSeriesEntity)
 
     @Query("DELETE FROM reminder_receipts") suspend fun clearReceipts()
@@ -273,7 +274,6 @@ interface PixDao {
 
     @Query("DELETE FROM task_tags") suspend fun clearTaskTags()
 
-    @Query("DELETE FROM subtasks") suspend fun clearAllSubtasks()
 
     @Query("DELETE FROM recurring_series") suspend fun clearSeries()
 
@@ -286,6 +286,9 @@ interface PixDao {
 
 @Dao
 interface SyncDao {
+    @Query("SELECT serverVersion FROM sync_entity_versions WHERE entityType='task_tags' AND entityId=:id AND deleted=1 LIMIT 1")
+    suspend fun deletedLinkVersion(id: String): Long?
+
     @Query("SELECT * FROM sync_outbox ORDER BY createdAt, id")
     suspend fun pending(): List<SyncOutboxEntity>
 
@@ -360,6 +363,16 @@ interface GoogleDao {
 
     @Upsert suspend fun saveCalendar(calendar: GoogleCalendarEntity)
 
+    @Query("DELETE FROM google_calendars WHERE accountId=:accountId AND id=:calendarId")
+    suspend fun deleteCalendar(accountId: String, calendarId: String)
+
+    @Query("UPDATE google_events SET colorArgb=:color WHERE accountId=:accountId AND calendarId=:calendarId")
+    suspend fun updateEventColor(accountId: String, calendarId: String, color: Int)
+
+    @Query("DELETE FROM google_events WHERE accountId=:accountId AND calendarId=:calendarId AND recurringEventId=:seriesId")
+    suspend fun deleteInstances(accountId: String, calendarId: String, seriesId: String)
+
+
     @Query("UPDATE google_calendars SET enabled=:enabled WHERE accountId=:accountId AND id=:calendarId")
     suspend fun setEnabled(accountId: String, calendarId: String, enabled: Boolean)
 
@@ -399,7 +412,6 @@ interface GoogleDao {
             ListEntity::class,
             TagEntity::class,
             TaskTagCrossRef::class,
-            SubtaskEntity::class,
             ReminderReceipt::class,
             RecurringSeriesEntity::class,
             SyncOutboxEntity::class,
@@ -410,7 +422,7 @@ interface GoogleDao {
             GoogleEventEntity::class,
             GoogleSyncStateEntity::class,
         ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class PixDatabase : RoomDatabase() {
@@ -421,6 +433,10 @@ abstract class PixDatabase : RoomDatabase() {
     abstract fun googleDao(): GoogleDao
 
     companion object {
+        val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = TaskHierarchy.migrate(db)
+        }
+
         val MIGRATION_7_8 =
             object : androidx.room.migration.Migration(7, 8) {
                 override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -579,6 +595,7 @@ abstract class PixDatabase : RoomDatabase() {
                     MIGRATION_5_6,
                     MIGRATION_6_7,
                     MIGRATION_7_8,
+                    MIGRATION_8_9,
                 )
                 .build()
     }

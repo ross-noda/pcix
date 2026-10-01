@@ -67,27 +67,27 @@ class RefinementUiTest {
     fun completedSubtasksAreStruckThroughAndNewSubtaskIsFirst() {
         val task = TaskEntity(title = "Checklist ordinata")
         open(task)
-        val active = SubtaskEntity(taskId = task.id, title = "Da preparare")
-        val done = SubtaskEntity(taskId = task.id, title = "Già completata", isCompleted = true)
+        val active = TaskEntity(parentTaskId = task.id, title = "Da preparare")
+        val done = TaskEntity(parentTaskId = task.id, title = "Già completata", isCompleted = true)
         runBlocking {
-            repo.saveSubtask(active)
-            repo.saveSubtask(done)
+            repo.saveChildForTest(active)
+            repo.saveChildForTest(done)
         }
-        rule.onNodeWithTag("new-subtask").performScrollTo().performTextInput("Nuova in cima")
-        rule.onNodeWithTag("new-subtask").performImeAction()
-        rule.waitUntil(5000) { runBlocking { repo.details(task.id)!!.subtasks.size == 3 } }
+        rule.onNodeWithTag("new-child-task").performScrollTo().performTextInput("Nuova in cima")
+        rule.onNodeWithTag("new-child-task").performImeAction()
+        rule.waitUntil(5000) { runBlocking { repo.details(task.id)!!.visibleChildren.size == 3 } }
         val new = runBlocking {
-            repo.details(task.id)!!.subtasks.single { it.title == "Nuova in cima" }
+            repo.details(task.id)!!.visibleChildren.single { it.title == "Nuova in cima" }
         }
-        val first = rule.onNodeWithTag("subtask-${new.id}").fetchSemanticsNode().boundsInRoot.top
+        val first = rule.onNodeWithTag("child-${new.id}").fetchSemanticsNode().boundsInRoot.top
         val second =
-            rule.onNodeWithTag("subtask-${active.id}").fetchSemanticsNode().boundsInRoot.top
-        val last = rule.onNodeWithTag("subtask-${done.id}")
+            rule.onNodeWithTag("child-${active.id}").fetchSemanticsNode().boundsInRoot.top
+        val last = rule.onNodeWithTag("child-${done.id}")
         assertTrue(first < second)
         assertTrue(second < last.fetchSemanticsNode().boundsInRoot.top)
         last.performScrollTo()
         val layouts = mutableListOf<TextLayoutResult>()
-        last.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        rule.onNodeWithText(done.title).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue(
             layouts.any { it.layoutInput.style.textDecoration == TextDecoration.LineThrough }
         )

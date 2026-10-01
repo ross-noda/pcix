@@ -74,6 +74,27 @@ class GoogleEventParserTest {
         assertEquals(15 * 60, moved.startMinute)
     }
 
+    @Test fun midnightIsExclusiveAndOffsetsUseDisplayTimeZone() {
+        val event = parse(JSONObject("""{"id":"midnight","start":{"dateTime":"2026-09-22T20:00:00Z"},"end":{"dateTime":"2026-09-22T22:00:00Z"}}"""))!!
+        assertEquals(event.startDay + 1, event.endDay)
+        assertEquals(22 * 60, event.startMinute)
+        assertEquals(0, event.endMinute)
+    }
+
+    @Test fun dstAndTimezoneWithoutOffsetAreParsed() {
+        val event = parse(JSONObject("""{"id":"dst","start":{"dateTime":"2026-03-29T01:30:00+01:00"},"end":{"dateTime":"2026-03-29T03:30:00+02:00"}}"""))!!
+        assertEquals(90, event.startMinute)
+        assertEquals(210, event.endMinute)
+        val foreign = parse(JSONObject("""{"id":"zone","start":{"dateTime":"2026-09-22T10:00:00","timeZone":"America/New_York"},"end":{"dateTime":"2026-09-22T11:00:00","timeZone":"America/New_York"}}"""))!!
+        assertEquals(16 * 60, foreign.startMinute)
+    }
+
+    @Test fun cancellationWithoutDatesKeepsEventAndRecurrenceIdentity() {
+        val event = parse(JSONObject("""{"id":"instance","status":"cancelled","recurringEventId":"master"}"""))!!
+        assertTrue(event.cancelled)
+        assertEquals("master", event.recurringEventId)
+    }
+
     private fun parse(json: JSONObject) =
         GoogleEventParser.parse("account", "cal", 1, json, zone)
 }

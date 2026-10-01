@@ -152,7 +152,7 @@ fun TaskActionSheet(
     if (action == "delete") {
         ConfirmDialog(
             stringResource(R.string.delete),
-            stringResource(R.string.delete_task_body),
+            stringResource(if(detail.visibleChildren.isNotEmpty()) R.string.delete_parent_body else R.string.delete_task_body),
             dismiss,
         ) {
             scoped { model.deleteTask(detail.task.id, it) }

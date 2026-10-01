@@ -117,17 +117,18 @@ class RecurrenceRepositoryTest {
     }
 
     @Test
-    fun tagsAndSubtasksAreCopiedAndExcludedFromCountsForTemplate() = runBlocking {
+    fun tagsAreCopiedButChildTasksStayWithOriginalOccurrence() = runBlocking {
         val t = TaskEntity(title = "Repeat", dueDay = date)
         val tag = repo.saveTag("Test", 1)
         repo.create(t, setOf(tag))
-        repo.saveSubtask(SubtaskEntity(taskId = t.id, title = "Child", isCompleted = true))
+        repo.saveChildForTest(TaskEntity(parentTaskId = t.id, title = "Child", isCompleted = true))
         repo.editRecurring(t, setOf(tag), rule, RecurrenceScope.THIS_AND_FUTURE)
         assertEquals(1, repo.tags.first().single().activeCount)
         repo.complete(t.id, true)
         val next = rows().single { !it.task.isCompleted }
         assertEquals(tag, next.tags.single().id)
-        assertFalse(next.subtasks.single().isCompleted)
+        assertTrue(next.visibleChildren.isEmpty())
+        assertTrue(repo.details(t.id)!!.visibleChildren.single().isCompleted)
     }
 
     @Test

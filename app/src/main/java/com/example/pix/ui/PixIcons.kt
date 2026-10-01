@@ -34,6 +34,7 @@ enum class PixSymbol {
     INBOX,
     REPEAT,
     CHECK,
+    CHECKLIST,
     CHEVRON,
     DELETE,
     COPY,
@@ -98,6 +99,13 @@ fun PixIcon(
                 PixSymbol.SEARCH -> {
                     drawCircle(tint, 7f, Offset(10f, 10f), style = stroke)
                     line(15f, 15f, 21f, 21f)
+                }
+                PixSymbol.CHECKLIST -> {
+                    drawRoundRect(tint, Offset(2f, 4f), androidx.compose.ui.geometry.Size(7f, 7f), androidx.compose.ui.geometry.CornerRadius(1f), style = stroke)
+                    line(3.5f, 7.5f, 5f, 9f, 8f, 5.5f)
+                    line(13f, 7f, 22f, 7f)
+                    drawRoundRect(tint, Offset(2f, 15f), androidx.compose.ui.geometry.Size(7f, 7f), androidx.compose.ui.geometry.CornerRadius(1f), style = stroke)
+                    line(13f, 18f, 22f, 18f)
                 }
                 PixSymbol.CHECK -> line(5f, 12f, 10f, 17f, 20f, 6f)
                 PixSymbol.TASKS -> {

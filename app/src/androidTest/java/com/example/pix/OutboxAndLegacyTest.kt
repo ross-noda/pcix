@@ -62,7 +62,7 @@ class OutboxAndLegacyTest {
         val tag = repository.saveTag("Stat", 1)
         val task = TaskEntity(id = "keep-uuid", title = "Exam", listId = list.id)
         repository.create(task, setOf(tag))
-        repository.saveSubtask(SubtaskEntity(taskId = task.id, title = "Chapter 1"))
+        repository.saveChildForTest(TaskEntity(parentTaskId = task.id, title = "Chapter 1"))
         db.syncDao().clear()
         OutboxRecorder(db).enqueueAll()
         val types = db.syncDao().pending().map { it.entityType + ":" + it.entityId }.toSet()

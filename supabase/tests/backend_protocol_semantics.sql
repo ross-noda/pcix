@@ -123,15 +123,15 @@ select public.pcix_apply_mutation(
   '__pcix_protocol_parent__'
 );
 select public.pcix_apply_mutation(
-  'subtasks','UPSERT','__pcix_child__',null,
+  'tasks','UPSERT','__pcix_child__',null,
   jsonb_build_object(
-    'id','__pcix_child__','task_id','__pcix_parent__','title','child','is_completed',false,
+    'id','__pcix_child__','parent_task_id','__pcix_parent__','list_id','00000000-0000-0000-0000-000000000001','notes','','priority',0,'is_template',false,'is_skipped',false,'title','child','is_completed',false,
     'sort_order',1,'created_at',300,'updated_at',300
   ),
   '__pcix_protocol_child__'
 );
 select public.pcix_apply_mutation(
-  'subtasks','DELETE','__pcix_child__',null,null,'__pcix_protocol_child_delete__'
+  'tasks','DELETE','__pcix_child__',null,null,'__pcix_protocol_child_delete__'
 );
 select public.pcix_apply_mutation(
   'tasks','DELETE','__pcix_parent__',null,null,'__pcix_protocol_parent_delete__'
@@ -141,9 +141,9 @@ do $$
 declare ack jsonb;
 begin
   ack := public.pcix_apply_mutation(
-    'subtasks','UPSERT','__pcix_child__',null,
+    'tasks','UPSERT','__pcix_child__',null,
     jsonb_build_object(
-      'id','__pcix_child__','task_id','__pcix_parent__','title','stale child','is_completed',false,
+      'id','__pcix_child__','parent_task_id','__pcix_parent__','list_id','00000000-0000-0000-0000-000000000001','notes','','priority',0,'is_template',false,'is_skipped',false,'title','stale child','is_completed',false,
       'sort_order',1,'created_at',300,'updated_at',999
     ),
     '__pcix_protocol_child_stale__'
@@ -172,6 +172,34 @@ begin
   if first_version <= 0 or last_version > through_version then
     raise exception 'pull returned invalid version range %..% through %', first_version, last_version, through_version;
   end if;
+end;
+$$;
+
+-- Explicit tag re-attach must distinguish intent from a stale offline UPSERT.
+select public.pcix_apply_mutation('tags','UPSERT','__pcix_link_tag__',null,
+  jsonb_build_object('id','__pcix_link_tag__','name','Link test','normalized_name','link test',
+    'color',0,'created_at',1,'updated_at',1), '__pcix_link_tag_create__');
+
+do $$
+declare
+  payload jsonb := jsonb_build_object('task_id','__pcix_template__','tag_id','__pcix_link_tag__','updated_at',1);
+  deleted_version bigint;
+  ack jsonb;
+begin
+  perform public.pcix_apply_mutation('task_tags','UPSERT','__pcix_template__','__pcix_link_tag__',payload,'__pcix_link_create__');
+  ack := public.pcix_apply_mutation('task_tags','DELETE','__pcix_template__','__pcix_link_tag__',null,'__pcix_link_delete__');
+  deleted_version := (ack->>'server_version')::bigint;
+  ack := public.pcix_apply_mutation('task_tags','UPSERT','__pcix_template__','__pcix_link_tag__',payload,'__pcix_link_stale__');
+  if ack->>'outcome' <> 'TOMBSTONED' then raise exception 'stale link resurrected'; end if;
+  payload := payload || jsonb_build_object('restore_after_version', deleted_version);
+  ack := public.pcix_apply_mutation('task_tags','UPSERT','__pcix_template__','__pcix_link_tag__',payload,'__pcix_link_restore__');
+  if ack->>'outcome' <> 'APPLIED' then raise exception 'explicit observed re-attach rejected'; end if;
+  if (public.pcix_apply_mutation('task_tags','UPSERT','__pcix_template__','__pcix_link_tag__',payload,'__pcix_link_restore__')) <> ack then
+    raise exception 're-attach retry changed acknowledgement';
+  end if;
+  perform public.pcix_apply_mutation('task_tags','DELETE','__pcix_template__','__pcix_link_tag__',null,'__pcix_link_delete_again__');
+  ack := public.pcix_apply_mutation('task_tags','UPSERT','__pcix_template__','__pcix_link_tag__',payload,'__pcix_link_old_restore__');
+  if ack->>'outcome' <> 'TOMBSTONED' then raise exception 'old re-attach resurrected a later deletion'; end if;
 end;
 $$;
 

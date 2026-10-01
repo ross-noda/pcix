@@ -97,14 +97,14 @@ class InteractionRepositoryTest {
     }
 
     @Test
-    fun subtaskOrderCopiesToFutureWithoutCompletingParent() = runBlocking {
+    fun childOrderDoesNotCloneChildrenIntoFuture() = runBlocking {
         val task = TaskEntity(title = "Series", dueDay = LocalDate.now().toEpochDay())
         repo.create(task)
-        val a = SubtaskEntity(taskId = task.id, title = "A", sortOrder = 0)
-        val b = SubtaskEntity(taskId = task.id, title = "B", sortOrder = 1)
-        repo.saveSubtask(a)
-        repo.saveSubtask(b)
-        repo.reorderSubtask(a.id, b.id, task.id, RecurrenceScope.ONLY_THIS)
+        val a = TaskEntity(parentTaskId = task.id, title = "A", sortOrder = 0)
+        val b = TaskEntity(parentTaskId = task.id, title = "B", sortOrder = 1)
+        repo.saveChildForTest(a)
+        repo.saveChildForTest(b)
+        repo.reorderChild(a.id, b.id, task.id)
         repo.editRecurring(
             task,
             emptySet(),
@@ -112,13 +112,14 @@ class InteractionRepositoryTest {
             RecurrenceScope.THIS_AND_FUTURE,
         )
         var schedules = 0
-        repo = TaskRepository(db) { schedules++ }
-        repo.reorderSubtask(b.id, a.id, task.id, RecurrenceScope.THIS_AND_FUTURE)
+        repo = TaskRepository(db, onTasksChanged = { schedules++ })
+        repo.reorderChild(b.id, a.id, task.id)
         assertEquals(1, schedules)
         assertFalse(repo.details(task.id)!!.task.isCompleted)
         repo.complete(task.id, true)
-        val next = repo.observe(TaskFilter(mode = "ALL"), ZonedDateTime.now()).first().single()
-        assertEquals(listOf("B", "A"), next.subtasks.sortedBy { it.sortOrder }.map { it.title })
+        val next = repo.observe(TaskFilter(mode = "ALL"), ZonedDateTime.now()).first().single { it.task.title == "Series" }
+        assertTrue(next.visibleChildren.isEmpty())
+        assertEquals(listOf("B", "A"),repo.details(task.id)!!.visibleChildren.sortedBy { it.sortOrder }.map { it.title })
     }
 
     @Test

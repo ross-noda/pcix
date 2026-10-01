@@ -251,8 +251,9 @@ fun TaskEditor(
     val editScope by model.editScope.collectAsStateWithLifecycle()
     var panel by remember { mutableStateOf<String?>(null) }
     var more by remember { mutableStateOf(false) }
+    var chooseParent by remember(draft.task.id) { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
-    var newSubtask by rememberSaveable(task.id) { mutableStateOf("") }
+    var newChild by rememberSaveable(task.id) { mutableStateOf("") }
     fun edit(value: TaskEntity) =
         model.edit(
             draft.copy(
@@ -310,6 +311,15 @@ fun TaskEditor(
                             PixIcon(PixSymbol.MORE, stringResource(R.string.more_actions))
                         }
                         DropdownMenu(more, { more = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(if(task.parentTaskId==null) R.string.link_child else R.string.change_parent)) },
+                                enabled = live?.visibleChildren.orEmpty().isEmpty(),
+                                onClick = { more=false; chooseParent=true },
+                            )
+                            if(task.parentTaskId!=null) DropdownMenuItem(
+                                text = { Text(stringResource(R.string.unlink_parent)) },
+                                onClick = { more=false;model.linkParent(task.id,null) },
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.share_task)) },
                                 onClick = {
@@ -431,15 +441,13 @@ fun TaskEditor(
                             }
                         }
                     }
-                    TextField(
-                        task.notes,
-                        { if (it.length <= 2000) edit(task.copy(notes = it)) },
-                        placeholder = { Text(stringResource(R.string.description)) },
-                        colors = plainFieldColors(),
-                        modifier = Modifier.fillMaxWidth().testTag("detail-notes"),
-                        minLines = 2,
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                    )
+                    MarkdownDescription(task.id,task.notes) { edit(task.copy(notes=it)) }
+                    live?.parent?.let { parent ->
+                        TextButton(onClick={model.openTask(parent.id)}) {
+                            PixIcon(PixSymbol.SUBTASK)
+                            Text(stringResource(R.string.parent_label,parent.title))
+                        }
+                    }
                     TaskImages(live?.images.orEmpty(), model)
                     if (task.seriesId != null && editScope != null)
                         Text(
@@ -466,64 +474,26 @@ fun TaskEditor(
                                     )
                                 }
                         }
-                    val subtaskOrder = remember { ReorderState() }
-                    val orderedSubtasks =
-                        live
-                            ?.subtasks
-                            ?.sortedWith(
-                                compareBy<SubtaskEntity> { it.isCompleted }
-                                    .thenBy { it.sortOrder }
-                                    .thenBy { it.id }
-                            )
-                            .orEmpty()
-                    orderedSubtasks.forEach { subtask ->
-                        key(subtask.id) {
-                            ReorderItem(
-                                subtask.id,
-                                orderedSubtasks
-                                    .filter { it.isCompleted == subtask.isCompleted }
-                                    .map { it.id },
-                                subtaskOrder,
-                                { source, target -> model.reorderSubtask(source, target, task.id) },
-                            ) {
-                                SubtaskRow(subtask, model)
+                    if(task.parentTaskId==null) {
+                        Text(stringResource(R.string.child_tasks),Modifier.padding(12.dp),style=MaterialTheme.typography.titleMedium)
+                        val order=remember(task.id) { ReorderState() }
+                        val children=live?.visibleChildren.orEmpty().sortedWith(compareBy<TaskEntity> { it.isCompleted }.thenBy { it.sortOrder }.thenBy { it.id })
+                        children.forEach { child -> key(child.id) {
+                            ReorderItem(child.id,children.filter { it.isCompleted==child.isCompleted }.map { it.id },order,
+                                { from,to -> model.reorderChild(from,to,task.id) }) {
+                                ChildTaskRow(child,task,lists,model)
+                            }
+                        } }
+                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                            TextField(newChild,{if(it.length<=200)newChild=it},
+                                placeholder={Text(stringResource(R.string.add_child))},colors=plainFieldColors(),
+                                modifier=Modifier.weight(1f).testTag("new-child-task"),enabled=TaskRules.validTitle(task.title),
+                                keyboardOptions=KeyboardOptions(imeAction=ImeAction.Done),
+                                keyboardActions=KeyboardActions(onDone={ if(newChild.isNotBlank()) {model.addChild(task.id,newChild);newChild=""} }))
+                            IconButton(enabled=newChild.isNotBlank(),onClick={model.addChild(task.id,newChild);newChild=""}) {
+                                PixIcon(PixSymbol.PLUS,stringResource(R.string.add_child))
                             }
                         }
-                    }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        PixIcon(PixSymbol.PLUS, modifier = Modifier.padding(start = 12.dp))
-                        TextField(
-                            newSubtask,
-                            { if (it.length <= 200) newSubtask = it },
-                            placeholder = { Text(stringResource(R.string.add_subtask)) },
-                            colors = plainFieldColors(),
-                            singleLine = false,
-                            enabled = TaskRules.validTitle(task.title),
-                            modifier = Modifier.weight(1f).testTag("new-subtask"),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions =
-                                KeyboardActions(
-                                    onDone = {
-                                        if (newSubtask.isNotBlank()) {
-                                            model.saveSubtask(
-                                                SubtaskEntity(taskId = task.id, title = newSubtask)
-                                            )
-                                            newSubtask = ""
-                                        }
-                                    }
-                                ),
-                        )
-                        if (newSubtask.isNotBlank())
-                            IconButton(
-                                onClick = {
-                                    model.saveSubtask(
-                                        SubtaskEntity(taskId = task.id, title = newSubtask)
-                                    )
-                                    newSubtask = ""
-                                }
-                            ) {
-                                PixIcon(PixSymbol.SEND, stringResource(R.string.add_subtask))
-                            }
                     }
                     if (task.minuteOfDay != null && task.dueDay != null)
                         Box(Modifier.padding(16.dp)) { ReminderControls() }
@@ -639,87 +609,21 @@ fun TaskEditor(
             dismiss = model::cancelScope,
             choose = model::chooseScope,
         )
+    if(chooseParent) ParentTaskPicker(model,task.id,{chooseParent=false}) { parent -> model.linkParent(task.id,parent);chooseParent=false }
     if (deleting) {
         if (task.seriesId != null)
-            RecurrenceScopeDialog(delete = true, dismiss = { deleting = false }) {
+            RecurrenceScopeDialog(delete = true, keepsChildren = live?.visibleChildren.orEmpty().isNotEmpty(), dismiss = { deleting = false }) {
                 model.deleteTask(task.id, it)
                 deleting = false
             }
         else
             ConfirmDialog(
                 stringResource(R.string.delete_task_question),
-                stringResource(R.string.delete_task_body),
+                stringResource(if(live?.visibleChildren.orEmpty().isNotEmpty()) R.string.delete_parent_body else R.string.delete_task_body),
                 { deleting = false },
             ) {
                 model.deleteTask(task.id)
             }
-    }
-}
-
-@Composable
-private fun SubtaskRow(subtask: SubtaskEntity, model: TasksViewModel) {
-    var title by remember(subtask.title) { mutableStateOf(subtask.title) }
-    var menu by remember { mutableStateOf(false) }
-    Column(Modifier.alpha(if (subtask.isCompleted) .55f else 1f)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(subtask.isCompleted, { model.saveSubtask(subtask.copy(isCompleted = it)) })
-            TextField(
-                title,
-                { if (it.length <= 200) title = it },
-                colors = plainFieldColors(),
-                singleLine = false,
-                textStyle =
-                    MaterialTheme.typography.bodyMedium.copy(
-                        textDecoration =
-                            if (subtask.isCompleted) TextDecoration.LineThrough
-                            else TextDecoration.None
-                    ),
-                modifier = Modifier.weight(1f).testTag("subtask-${subtask.id}"),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions =
-                    KeyboardActions(
-                        onDone = {
-                            if (title.isNotBlank()) model.saveSubtask(subtask.copy(title = title))
-                        }
-                    ),
-            )
-            if (title != subtask.title && title.isNotBlank())
-                IconButton(onClick = { model.saveSubtask(subtask.copy(title = title)) }) {
-                    PixIcon(PixSymbol.CHECK, stringResource(R.string.save))
-                }
-            Box {
-                IconButton(onClick = { menu = true }) {
-                    PixIcon(PixSymbol.MORE, stringResource(R.string.more_actions))
-                }
-                DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.move_up)) },
-                        onClick = {
-                            menu = false
-                            model.moveSubtask(subtask, -1)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.move_down)) },
-                        onClick = {
-                            menu = false
-                            model.moveSubtask(subtask, 1)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.delete)) },
-                        onClick = {
-                            menu = false
-                            model.deleteSubtask(subtask.id)
-                        },
-                    )
-                }
-            }
-        }
-        HorizontalDivider(
-            Modifier.padding(start = 48.dp),
-            color = MaterialTheme.colorScheme.outlineVariant,
-        )
     }
 }
 

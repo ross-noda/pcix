@@ -84,7 +84,7 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         pendingBackup.value = null
         backupAction(com.example.pix.R.string.backup_restored) {
             backups.restore(prepared)
-            runCatching { com.example.pix.cloud.OutboxRecorder((getApplication() as PixApplication).database).enqueueAll() }
+            com.example.pix.cloud.CloudSyncWork.enqueue(getApplication())
             filter.value = TaskFilter(mode = startupView.value, showCompleted = true)
             runCatching { com.example.pix.reminders.ReminderWork.reconcile(getApplication()) }
         }
@@ -337,7 +337,10 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         writes.trySend(block)
     }
 
-    fun openTask(id: String) = action { repository.details(id)?.let { open(it) } }
+    fun openTask(id: String) {
+        flush()
+        action { repository.details(id)?.let { open(it) } }
+    }
 
     fun retry() {
         refresh.value++
@@ -403,6 +406,13 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
             }
     }
 
+    suspend fun flushAndAwait() {
+        flush()
+        val done = CompletableDeferred<Unit>()
+        writes.send { done.complete(Unit) }
+        done.await()
+    }
+
     fun flush() {
         saveJob?.cancel()
         if (editVersion == savedVersion) return
@@ -462,17 +472,6 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
 
     fun reorderList(id: String, target: String) = action { repository.reorderList(id, target) }
 
-    fun reorderSubtask(id: String, target: String, taskId: String) = scoped {
-        action {
-            repository.reorderSubtask(
-                id,
-                target,
-                taskId,
-                editScope.value ?: RecurrenceScope.ONLY_THIS,
-            )
-        }
-    }
-
     fun moveTask(id: String, list: String, scope: RecurrenceScope) = action {
         repository.moveTask(id, list, scope)
     }
@@ -523,26 +522,21 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         }
     }
 
-    fun saveSubtask(value: SubtaskEntity) = scoped {
+    fun parentCandidates(id: String, search: String) = repository.parentCandidates(id, search)
+
+    fun linkParent(id: String, parent: String?) {
         flush()
-        action { repository.saveSubtask(value, editScope.value ?: RecurrenceScope.ONLY_THIS) }
-    }
-
-    fun deleteSubtask(id: String) = scoped {
-        val taskId = draft.value?.task?.id
         action {
-            repository.deleteSubtask(id, taskId, editScope.value ?: RecurrenceScope.ONLY_THIS)
+            repository.linkParent(id, parent)
+            draft.value?.takeIf { it.task.id == id }?.let { draft.value=it.copy(task=it.task.copy(parentTaskId=parent)) }
         }
     }
 
-    fun moveSubtask(value: SubtaskEntity, direction: Int) = scoped {
-        action {
-            repository.moveSubtask(
-                value.id,
-                value.taskId,
-                direction,
-                editScope.value ?: RecurrenceScope.ONLY_THIS,
-            )
-        }
+    fun addChild(parent: String,title: String) {
+        flush()
+        action { repository.createChild(parent,title) }
     }
+
+    fun reorderChild(id:String,target:String,parent:String) = action { repository.reorderChild(id,target,parent) }
+    fun moveChild(id:String,parent:String,direction:Int) = action { repository.moveChild(id,parent,direction) }
 }

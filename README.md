@@ -1,31 +1,29 @@
 # P©ix
 
-Task manager Android personale offline-first, Kotlin e Jetpack Compose.
-Core Room, Home, Quick Add, dettaglio, liste, tag, sottotask, ricerca e calendario mensile.
-Promemoria locali con permessi contestuali e azioni Completa/Posticipa. Senza accesso agli
-allarmi esatti Android può ritardare la consegna. Ricorrenze giornaliere, feriali, settimanali multi-giorno, mensili, annuali e personalizzate.
-Interfaccia nero/antracite con accento blu, menu laterale e dettaglio a schermo intero.
-Matrice di Eisenhower personalizzabile, vista Domani e calendario settimanale con agenda oraria.
-Immagini nel contenuto, icone delle liste, colore principale e vista iniziale personalizzabili.
-Swipe, menu contestuali e ordine manuale persistente per task, liste e sottotask.
-Intervalli con inizio/fine, sotto-task completate in fondo e pannello strumenti uniforme.
-Promemoria con suono predefinito, nel rispetto delle impostazioni Android.
-Cloud non ancora implementato.
+Task manager Android offline-first: Kotlin, Compose/Material 3, Room, reminder, ricorrenze, calendario mese/settimana, matrice, backup ZIP, immagini locali e personalizzazione IT/EN.
 
-Aprire questa cartella in Android Studio e sincronizzare Gradle. SDK 37, minSdk 26,
-JDK richiesto dal toolchain Gradle del progetto (25). Il wrapper e il resolver sono già configurati.
+Account Supabase, outbox transazionale e sincronizzazione multi-device sono implementati nel codice. Google Calendar è una cache Room separata e read-only. Le integrazioni reali restano PARTIAL finché non vengono configurate e provate con Supabase e Google; nessun login o cloud simulato nell'app.
+
+Package `com.example.pix`, minSdk 26, compile/targetSdk 37. Apri in Android Studio. Toolchain e wrapper sono già configurati.
 
 ```sh
-JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug testDebugUnitTest lintDebug
-JAVA_HOME=/opt/android-studio/jbr ./gradlew connectedDebugAndroidTest
+JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug testDebugUnitTest lintDebug --max-workers=2
+ANDROID_SERIAL=<emulatore-di-test> JAVA_HOME=/opt/android-studio/jbr ./gradlew connectedDebugAndroidTest -Ppix.offlineTestBuild=true --max-workers=2
 ```
 
-Il secondo comando richiede emulatore/dispositivo avviato. Non utilizzare dispositivi con dati
-importanti per la suite UI: i test creano task. APK in app/build/outputs/apk/debug/app-debug.apk.
+La suite Android crea e modifica dati: usare l'AVD dedicato all'audit o un'installazione di prova. APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
-- [Stato dettagliato](docs/IMPLEMENTATION_STATUS.md)
+- [Configurazione Supabase e Google](docs/CLOUD_SETUP.md)
 - [Architettura](docs/ARCHITECTURE.md)
-- [Backend](docs/BACKEND_SETUP.md)
-- [Verifiche](docs/VERIFICATION.md)
+- [Protocollo sync](docs/SYNC_PROTOCOL.md)
+- [Stato corrente](docs/IMPLEMENTATION_STATUS.md)
+- [Verifiche effettive](docs/VERIFICATION.md)
+- [Rapporto finale audit](docs/FINAL_GOOGLE_CLOUD_AUDIT.md)
 
-Personalizzazione del testo (tre dimensioni e tre famiglie), backup ZIP con importazione confermata e condivisione task: vedere docs/BACKUP_FORMAT.md e docs/IMPLEMENTATION_STATUS.md.
+La documentazione precedente è conservata in `docs/history/2026-09-24-before-final-audit/` e non rappresenta una certificazione della build attuale.
+
+`-Ppix.offlineTestBuild=true` crea soltanto una build debug locale per le regressioni UI senza login. Omettere questa proprietà per l’APK collegato al progetto Supabase.
+
+## Aggiornamento Auth e gerarchia — 25 settembre 2026
+
+Configurazione precisa dei callback nativi, template email e Google: [AUTH_SETUP](AUTH_SETUP.md). Prove sul telefono: [AUTH_VERIFICATION](AUTH_VERIFICATION.md). La gerarchia richiede Room v9 (migrazione automatica) e SQL `0005_task_hierarchy.sql` dopo 0001–0004; aggiornare tutti i client.

@@ -39,6 +39,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Explicit local regression APK; normal builds always use local.properties.
+            if (providers.gradleProperty("pix.offlineTestBuild").orNull == "true") {
+                buildConfigField("String", "SUPABASE_URL", "\"\"")
+                buildConfigField("String", "SUPABASE_ANON_KEY", "\"\"")
+                buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
+            }
+        }
         release {
             optimization {
                 enable = false
@@ -52,6 +60,10 @@ android {
 }
 
 dependencies {
+    implementation("org.commonmark:commonmark:0.30.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.30.0")
+    // Navigation and Room migration tests must load the same serialization ABI in both APKs.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.okhttp)

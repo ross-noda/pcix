@@ -73,7 +73,7 @@ fun TaskRowContent(
                 .padding(end = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (detail.subtasks.isNotEmpty())
+            if (detail.visibleChildren.isNotEmpty())
                 IconButton(
                     onClick = onComplete,
                     modifier =
@@ -114,6 +114,8 @@ fun TaskRowContent(
                     color = if (t.isCompleted) subdued else MaterialTheme.colorScheme.onSurface,
                     textDecoration = if (t.isCompleted) TextDecoration.LineThrough else null,
                 )
+                if(t.parentTaskId!=null) Text(stringResource(R.string.parent_label,detail.parent?.title ?: stringResource(R.string.child_task)),
+                    style=MaterialTheme.typography.labelSmall,color=subdued,maxLines=1,overflow=TextOverflow.Ellipsis)
                 if (t.durationMinutes != null)
                     Text(
                         durationEndLabel(t),
@@ -123,7 +125,7 @@ fun TaskRowContent(
                 if (
                     detail.tags.isNotEmpty() ||
                         detail.list.id != com.example.pix.data.INBOX_ID ||
-                        detail.subtasks.isNotEmpty()
+                        detail.visibleChildren.isNotEmpty()
                 )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -137,8 +139,8 @@ fun TaskRowContent(
                             listOf(
                                     detail.list.name,
                                     detail.tags.take(2).joinToString(" ") { "#${it.name}" },
-                                    if (detail.subtasks.isNotEmpty())
-                                        "${detail.subtasks.count{it.isCompleted}}/${detail.subtasks.size}"
+                                    if (detail.visibleChildren.isNotEmpty())
+                                        "${detail.visibleChildren.count{it.isCompleted}}/${detail.visibleChildren.size}"
                                     else "",
                                 )
                                 .filter { it.isNotEmpty() }

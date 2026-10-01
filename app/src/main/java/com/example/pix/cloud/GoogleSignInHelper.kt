@@ -16,7 +16,7 @@ class GoogleSignInHelper(private val config: CloudConfig) {
     data class Token(val idToken: String, val nonce: String)
 
     suspend fun token(activity: Activity): Token {
-        if (!config.googleConfigured) error("google")
+        if (!config.googleConfigured) throw AuthException(com.example.pix.R.string.auth_google_configuration)
         val nonce = secureNonce()
         val hashed = sha256(nonce)
         val manager = CredentialManager.create(activity)
@@ -32,7 +32,7 @@ class GoogleSignInHelper(private val config: CloudConfig) {
                     credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
             )
                 GoogleIdTokenCredential.createFrom(credential.data)
-            else error("credential")
+            else throw AuthException(com.example.pix.R.string.auth_google_token)
         return Token(google.idToken, nonce)
     }
 

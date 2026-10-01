@@ -21,6 +21,7 @@ class MigrationTest {
             PixDatabase.MIGRATION_5_6,
             PixDatabase.MIGRATION_6_7,
             PixDatabase.MIGRATION_7_8,
+            PixDatabase.MIGRATION_8_9,
         )
 
     @Test fun versionOneDataSurvivesMigration() = verifyMigration(1)
@@ -89,12 +90,33 @@ class MigrationTest {
         }
     }
 
+    @Test fun versionEightConvertsPendingChildrenWithoutLosingRelations() {
+        val name = "migration-v8-hierarchy-${System.nanoTime()}.db"
+        try {
+            helper.createDatabase(name,8).use { db ->
+                seedLegacyData(db,8)
+                db.execSQL("INSERT INTO sync_outbox(id,entityType,entityId,operation,payload,createdAt,attemptCount,lastAttemptAt) VALUES('old-child','subtasks','$SUBTASK_ID','UPSERT','{}',100,2,200)")
+                db.execSQL("INSERT INTO sync_outbox(id,entityType,entityId,operation,payload,createdAt,attemptCount,lastAttemptAt) VALUES('old-delete','subtasks','removed-child','DELETE','{}',100,0,NULL)")
+                db.execSQL("INSERT INTO sync_state(accountId,checkpoint,lastSuccessAt) VALUES('account','100',300)")
+            }
+            helper.runMigrationsAndValidate(name,9,true,PixDatabase.MIGRATION_8_9).use { db ->
+                assertCoreData(db,8)
+                assertVersionSpecificData(db,8)
+                assertNoForeignKeyViolations(db)
+                assertEquals(0L,db.scalarLong("SELECT COUNT(*) FROM sync_outbox WHERE entityType='subtasks'"))
+                assertEquals(1L,db.scalarLong("SELECT COUNT(*) FROM sync_outbox WHERE entityType='tasks' AND entityId='${TaskHierarchy.legacyId(SUBTASK_ID)}' AND operation='UPSERT'"))
+                assertEquals(1L,db.scalarLong("SELECT COUNT(*) FROM sync_outbox WHERE entityId='${TaskHierarchy.legacyId("removed-child")}' AND operation='DELETE'"))
+                assertEquals(1L,db.scalarLong("SELECT COUNT(*) FROM sync_state WHERE checkpoint IS NULL"))
+            }
+        } finally { instrumentation.targetContext.deleteDatabase(name) }
+    }
+
     private fun verifyMigration(version: Int) {
         val name = "migration-v${version}-to-v8-${System.nanoTime()}.db"
         try {
             helper.createDatabase(name, version).use { db -> seedLegacyData(db, version) }
 
-            helper.runMigrationsAndValidate(name, 8, true, *migrations).use { db ->
+            helper.runMigrationsAndValidate(name, 9, true, *migrations).use { db ->
                 assertCoreData(db, version)
                 assertVersionSpecificData(db, version)
                 assertVersionEightInfrastructure(db)
@@ -270,9 +292,9 @@ class MigrationTest {
                 "SELECT COUNT(*) FROM task_tags WHERE taskId='$TASK_ID' AND tagId='$TAG_ID'"
             ),
         )
-        db.query("SELECT * FROM subtasks WHERE id='$SUBTASK_ID'").use { cursor ->
+        db.query("SELECT * FROM tasks WHERE id='${TaskHierarchy.legacyId(SUBTASK_ID)}'").use { cursor ->
             assertTrue(cursor.moveToFirst())
-            assertEquals(TASK_ID, cursor.text("taskId"))
+            assertEquals(TASK_ID, cursor.text("parentTaskId"))
             assertEquals("Legacy subtask", cursor.text("title"))
             assertEquals(1, cursor.int("isCompleted"))
             assertEquals(31L, cursor.long("sortOrder"))

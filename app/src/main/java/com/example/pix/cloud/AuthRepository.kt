@@ -62,9 +62,10 @@ class AuthRepository internal constructor(
 
     override suspend fun restore() {
         mutex.withLock {
+            if (_state.value !is AuthState.Loading) return
             val stored = store.read()
             if (stored == null) {
-                _state.value = AuthState.Unauthenticated
+                _state.value = store.signupEmail()?.let(AuthState::AwaitingEmail) ?: AuthState.Unauthenticated
                 return
             }
             if (!stored.expired(nowSeconds())) {
@@ -84,24 +85,47 @@ class AuthRepository internal constructor(
 
     suspend fun signUp(email: String, password: String): Result<Unit> =
         runAuth(setErrorState = true) {
-            val response =
-                call {
-                    api.auth(
-                        "/signup",
-                        JSONObject().put("email", email.trim()).put("password", password),
-                    )
-                }
+            AuthValidation.registration(email, password, password)?.let { return@runAuth validationFailure(it) }
+            val verifier = newPkceVerifier()
+            store.writeSignup(verifier, email.trim())
+            val response = call {
+                api.auth("/signup?redirect_to=${URLEncoder.encode(CALLBACK_REDIRECT, "UTF-8")}",
+                    JSONObject().put("email", email.trim()).put("password", password)
+                        .put("code_challenge", pkceChallenge(verifier)).put("code_challenge_method", "s256"))
+            }
             if (!response.ok) return@runAuth responseFailure(response)
             val json = JSONObject(response.body.ifBlank { "{}" })
-            val access = json.opt("access_token") as? String
-            val refresh = json.opt("refresh_token") as? String
-            if (json.optJSONObject("user") != null && !access.isNullOrBlank() && !refresh.isNullOrBlank()) {
+            if (!(json.opt("access_token") as? String).isNullOrBlank() && !(json.opt("refresh_token") as? String).isNullOrBlank()) {
                 persist(parseToken(json))
+                store.clearSignup()
             } else {
-                _state.value = AuthState.Unauthenticated
+                // Supabase intentionally also returns success for some existing-account cases.
+                // Never infer a session, or expose account existence, from that response.
+                _state.value = AuthState.AwaitingEmail(email.trim())
             }
             Result.success(Unit)
         }
+
+    suspend fun resendConfirmation(email: String): Result<Unit> = runAuth(setErrorState = true) {
+        if (!AuthValidation.validEmail(email)) return@runAuth validationFailure(com.example.pix.R.string.auth_invalid_email)
+        val verifier = if (store.signupEmail() == email.trim()) store.signupVerifier() ?: newPkceVerifier() else newPkceVerifier()
+        store.writeSignup(verifier, email.trim())
+        val response = call {
+            api.auth("/resend?redirect_to=${URLEncoder.encode(CALLBACK_REDIRECT, "UTF-8")}",
+                JSONObject().put("type", "signup").put("email", email.trim())
+                    .put("code_challenge", pkceChallenge(verifier)).put("code_challenge_method", "s256"))
+        }
+        if (!response.ok) return@runAuth responseFailure(response)
+        _state.value = AuthState.AwaitingEmail(email.trim())
+        Result.success(Unit)
+    }
+
+    fun showLogin() { if (store.read() == null) _state.value = AuthState.Unauthenticated }
+
+    private fun validationFailure(message: Int): Result<Unit> {
+        if (store.read() == null) _state.value = AuthState.Error(message)
+        return Result.failure(AuthException(message))
+    }
 
     suspend fun signIn(email: String, password: String): Result<Unit> =
         runAuth(setErrorState = true) {
@@ -155,23 +179,32 @@ class AuthRepository internal constructor(
             Result.success(Unit)
         }
 
-    suspend fun handleDeeplink(fragmentOrQuery: String): Result<Unit> =
+    suspend fun handleDeeplink(fragmentOrQuery: String): Result<Unit> {
+        val result = processDeeplink(fragmentOrQuery)
+        if (result.isFailure) mutex.withLock { store.read()?.let { publish(it, offline = it.expired(nowSeconds())) } }
+        return result
+    }
+
+    private suspend fun processDeeplink(fragmentOrQuery: String): Result<Unit> =
         runAuth(setErrorState = true) {
-            if (!isRecoveryRedirect(fragmentOrQuery)) {
+            val recovery = matchesRedirect(fragmentOrQuery, RECOVERY_REDIRECT)
+            if (!recovery && !matchesRedirect(fragmentOrQuery, CALLBACK_REDIRECT)) {
                 return@runAuth invalidRecovery("unexpected redirect")
             }
-            val params = parseParams(fragmentOrQuery)
+            val params = runCatching { parseParams(fragmentOrQuery) }.getOrElse {
+                return@runAuth validationFailure(com.example.pix.R.string.auth_invalid_callback)
+            }
             val remoteError = params["error_description"] ?: params["error"]
             if (!remoteError.isNullOrBlank()) {
-                store.clearRecoveryVerifier()
-                return@runAuth Result.failure(AuthException(com.example.pix.R.string.auth_generic, remoteError))
+                return@runAuth validationFailure(com.example.pix.R.string.auth_invalid_callback)
             }
 
             // Current mobile flow: PKCE keeps access/refresh tokens out of the deep link.
             params["code"]?.takeIf { it.isNotBlank() }?.let { code ->
                 val verifier =
-                    store.recoveryVerifier()
-                        ?: return@runAuth invalidRecovery("missing PKCE verifier")
+                    (if (recovery) store.recoveryVerifier() else store.signupVerifier())
+                        ?: return@runAuth validationFailure(com.example.pix.R.string.auth_invalid_callback)
+                if (store.read() == null) _state.value = AuthState.Loading
                 val tokenResponse =
                     call {
                         api.auth(
@@ -182,18 +215,16 @@ class AuthRepository internal constructor(
                         )
                     }
                 if (!tokenResponse.ok) {
-                    if (tokenResponse.code in 400..499) store.clearRecoveryVerifier()
                     return@runAuth responseFailure(tokenResponse)
                 }
                 val recoverySession =
-                    parseToken(JSONObject(tokenResponse.body)).copy(recoveryPending = true)
-                store.clearRecoveryVerifier()
+                    parseToken(JSONObject(tokenResponse.body)).copy(recoveryPending = recovery)
                 persist(recoverySession)
+                if (recovery) store.clearRecoveryVerifier() else store.clearSignup()
                 return@runAuth Result.success(Unit)
             }
 
-            store.clearRecoveryVerifier()
-            return@runAuth invalidRecovery("missing PKCE auth code")
+            return@runAuth validationFailure(if (recovery) com.example.pix.R.string.auth_invalid_recovery_link else com.example.pix.R.string.auth_invalid_callback)
         }
 
     suspend fun updatePassword(
@@ -344,8 +375,11 @@ class AuthRepository internal constructor(
                 invalidateSession()
                 return Result.failure(AuthException(com.example.pix.R.string.auth_session_expired))
             }
-            if (response.ok) return Result.success(DeleteAccountConfirmation.Deleted)
-            if (response.code == 404 && response.body.contains("already_deleted")) {
+            val confirmation = runCatching { JSONObject(response.body) }.getOrNull()
+            if (response.ok && confirmation?.opt("ok") == true) {
+                return Result.success(DeleteAccountConfirmation.Deleted)
+            }
+            if (response.code == 404 && confirmation?.optString("code") == "already_deleted") {
                 return Result.success(DeleteAccountConfirmation.AlreadyDeleted)
             }
             Result.failure(
@@ -423,14 +457,12 @@ class AuthRepository internal constructor(
             .toMap()
     }
 
-    private fun isRecoveryRedirect(raw: String): Boolean =
-        raw == RECOVERY_REDIRECT ||
-            raw.startsWith("$RECOVERY_REDIRECT?") ||
-            raw.startsWith("$RECOVERY_REDIRECT#")
+    private fun matchesRedirect(raw: String, redirect: String): Boolean =
+        raw == redirect || raw.startsWith("$redirect?") || raw.startsWith("$redirect#")
 
     private fun invalidRecovery(detail: String): Result<Unit> {
         val error = AuthException(com.example.pix.R.string.auth_invalid_recovery_link, detail)
-        _state.value = AuthState.Error(error.messageRes, detail)
+        if (store.read() == null) _state.value = AuthState.Error(error.messageRes, detail)
         return Result.failure(error)
     }
 
@@ -451,7 +483,7 @@ class AuthRepository internal constructor(
         setState: Boolean = true,
     ): Result<Unit> {
         val messageRes = AuthErrors.map(response.code, response.body)
-        if (setState) _state.value = AuthState.Error(messageRes, response.body.take(200))
+        if (setState && store.read() == null) _state.value = AuthState.Error(messageRes, response.body.take(200))
         return Result.failure(AuthException(messageRes, response.body.take(200)))
     }
 
@@ -469,8 +501,10 @@ class AuthRepository internal constructor(
             }
             try {
                 block()
+            } catch (_: org.json.JSONException) {
+                validationFailure(com.example.pix.R.string.auth_server)
             } catch (_: IOException) {
-                if (setErrorState) _state.value = AuthState.Error(com.example.pix.R.string.auth_offline)
+                if (setErrorState && store.read() == null) _state.value = AuthState.Error(com.example.pix.R.string.auth_offline)
                 Result.failure(AuthException(com.example.pix.R.string.auth_offline))
             }
         }
@@ -480,6 +514,7 @@ class AuthRepository internal constructor(
     private fun Long?.orDefault(default: Long): Long = this ?: default
 
     companion object {
+        const val CALLBACK_REDIRECT = "com.example.pix://auth/callback"
         const val RECOVERY_REDIRECT = "com.example.pix://auth/recovery"
 
         private fun generatePkceVerifier(): String {

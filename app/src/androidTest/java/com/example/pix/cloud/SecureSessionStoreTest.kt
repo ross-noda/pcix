@@ -80,4 +80,19 @@ class SecureSessionStoreTest {
         assertNull(store.recoveryVerifier())
     }
 
+    @Test fun signupPkceAndEmailSurviveStoreRecreationEncrypted() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val store=SecureSessionStore(context)
+        store.clear()
+        store.writeSignup("signup-verifier-marker", "signup@example.com")
+        store.writeRecoveryVerifier("independent-recovery")
+        val raw=context.getSharedPreferences("pcix.auth.secure",Context.MODE_PRIVATE).all.values.joinToString("|")
+        assertFalse(raw.contains("signup-verifier-marker"));assertFalse(raw.contains("signup@example.com"))
+        val recreated=SecureSessionStore(context)
+        assertEquals("signup-verifier-marker",recreated.signupVerifier())
+        assertEquals("signup@example.com",recreated.signupEmail())
+        recreated.clearSignup()
+        assertNull(recreated.signupVerifier());assertEquals("independent-recovery",recreated.recoveryVerifier())
+        recreated.clear()
+    }
 }

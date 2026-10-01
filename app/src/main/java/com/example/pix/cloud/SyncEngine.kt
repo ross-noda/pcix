@@ -1,6 +1,7 @@
 package com.example.pix.cloud
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import androidx.room.withTransaction
 import com.example.pix.data.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,12 +16,17 @@ enum class CloudSyncStatus {
     Offline,
     Error,
     Unconfigured,
+    SchemaMissing,
+    Forbidden,
+    InvalidData,
+    SessionExpired,
 }
 
 class SyncEngine(
     private val db: PixDatabase,
     private val auth: AuthRepository,
     private val remote: SyncRemote,
+    private val accountReady: (String) -> Boolean = { true },
     private val onReminders: () -> Unit,
 ) {
     private val mutex = Mutex()
@@ -41,7 +47,7 @@ class SyncEngine(
                 return false
             }
             val user = (auth.state.value as? AuthState.Authenticated)?.user ?: auth.session()?.user
-            if (user == null) {
+            if (user == null || !accountReady(user.id)) {
                 _status.value = CloudSyncStatus.Idle
                 return false
             }
@@ -74,17 +80,31 @@ class SyncEngine(
                 _lastSuccess.value = now
                 _status.value = CloudSyncStatus.Idle
                 true
+            } catch (cancelled: CancellationException) {
+                // WorkManager may stop a running worker when connectivity is lost. Do not leave
+                // Settings stuck on Syncing while that work waits to run again.
+                _status.value = CloudSyncStatus.Error
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                    try { persistStatus(user.id, CloudSyncStatus.Error) }
+                    catch (failure: Exception) { Log.w("PcixSync", "cancel status persistence failed: ${failure.javaClass.simpleName}") }
+                }
+                throw cancelled
             } catch (_: java.io.IOException) {
                 Log.w("PcixSync", "offline or network error")
                 persistStatus(user.id, CloudSyncStatus.Offline)
                 false
             } catch (_: RemoteDataSource.Unauthorized) {
                 Log.w("PcixSync", "session rejected")
-                persistStatus(user.id, CloudSyncStatus.Error)
+                persistStatus(user.id, CloudSyncStatus.SessionExpired)
+                false
+            } catch (error: SyncHttpFailure) {
+                Log.w("PcixSync", "${error.stage}: HTTP ${error.statusCode}; code=${error.serverCode ?: "unknown"}; category=${error.status}")
+                persistStatus(user.id, error.status)
                 false
             } catch (error: Exception) {
-                Log.w("PcixSync", "sync failed: ${error.javaClass.simpleName}")
-                persistStatus(user.id, CloudSyncStatus.Error)
+                val location = error.stackTrace.firstOrNull { it.className.startsWith("com.example.pix.") }
+                Log.w("PcixSync", "sync failed: ${error.javaClass.simpleName}; at=${location?.className}.${location?.methodName}:${location?.lineNumber}")
+                persistStatus(user.id, CloudSyncStatus.InvalidData)
                 false
             }
         }
@@ -134,8 +154,10 @@ class SyncEngine(
                         db.syncDao().removeEntity(row.entityType, row.entityId)
                     } else {
                         db.syncDao().remove(row.id)
+                        // ACK proves server commit, not equality with the local payload. Pull must
+                        // still apply the canonical row (e.g. deleted list remapped to Inbox).
                     }
-                    db.syncDao()
+                    if (ack.deleted) db.syncDao()
                         .saveVersion(
                             SyncEntityVersionEntity(
                                 accountId = accountId,
@@ -185,6 +207,7 @@ class SyncEngine(
                     }
                 }
             },
+            { if(it.entityType == "tasks" && it.operation == OutboxRecorder.UPSERT && !JSONObject(it.payload).isNull("parent_task_id")) 1 else 0 },
             { it.createdAt },
             { it.id },
         )
@@ -219,6 +242,7 @@ class SyncEngine(
         val through = remote.snapshot(token)
         if (through < checkpoint) throw RemoteDataSource.ProtocolError("server version moved backwards")
 
+        val buffered = mutableListOf<RemoteChange>()
         var cursor = checkpoint
         while (cursor < through) {
             val page = remote.pull(token, cursor, through)
@@ -228,8 +252,7 @@ class SyncEngine(
             if (page.nextCursor <= cursor || page.nextCursor > through) {
                 throw RemoteDataSource.ProtocolError("invalid pull cursor")
             }
-            val touchedReminders = apply(accountId, page.rows)
-            if (touchedReminders) onReminders()
+            buffered.addAll(page.rows)
             cursor = page.nextCursor
             if (!page.more && cursor < through) {
                 throw RemoteDataSource.ProtocolError("pull page stopped before snapshot high-water mark")
@@ -239,6 +262,12 @@ class SyncEngine(
 
         // Advance only after every requested page was parsed and committed. If any page throws,
         // this write is never reached; a retry starts from the previous global checkpoint.
+        val touchedReminders = db.withTransaction {
+            val touched = apply(accountId, buffered)
+            TaskHierarchy.validateGraph(db.openHelper.writableDatabase)
+            touched
+        }
+        if(touchedReminders) onReminders()
         val current = db.syncDao().state(accountId) ?: initial
         db.syncDao().saveState(current.copy(checkpoint = through.toString()))
     }
@@ -258,6 +287,8 @@ class SyncEngine(
 
     /** Returns true when the local canonical row actually changed. */
     private suspend fun applyChange(accountId: String, change: RemoteChange): Boolean {
+        // Migration 0005 publishes canonical tasks for archived legacy subtasks.
+        if (change.entityType == "subtasks") return false
         RemoteDataSource.validateEntity(change.entityType)
         val localId = localIdentity(change)
         val appliedVersion =
@@ -333,8 +364,8 @@ class SyncEngine(
                 }
             }
             "tags" -> db.dao().deleteTag(localId)
-            "tasks" -> db.dao().deleteTask(localId)
-            "subtasks" -> db.dao().deleteSubtask(localId)
+            "tasks" -> { db.dao().detachChildren(localId, System.currentTimeMillis()); db.dao().deleteTask(localId) }
+            "subtasks" -> Unit
             // Deleting a series tombstone must not delete its template/task graph. Any task/template
             // deletion required by a scoped recurrence edit arrives as its own task tombstone.
             "recurring_series" -> db.dao().deleteSeries(localId)
@@ -352,13 +383,15 @@ class SyncEngine(
             "lists" -> db.dao().replaceList(SyncCodec.parseList(row))
             "tags" -> db.dao().replaceTag(SyncCodec.parseTag(row))
             "tasks" -> db.dao().replaceTask(SyncCodec.parseTask(row))
-            "subtasks" -> db.dao().replaceSubtask(SyncCodec.parseSubtask(row))
+            "subtasks" -> Unit
             "recurring_series" -> db.dao().replaceSeries(SyncCodec.parseSeries(row))
             "task_images" -> db.dao().insertImage(SyncCodec.parseImage(row))
             "task_tags" ->
                 db.dao().attachTag(TaskTagCrossRef(row.getString("task_id"), row.getString("tag_id")))
         }
     }
+
+    suspend fun <T> withSyncPaused(block: suspend () -> T): T = mutex.withLock { block() }
 
     suspend fun pendingCount() = db.syncDao().pending().size
 }

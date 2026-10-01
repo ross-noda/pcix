@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.example.pix.saveChildForTest
 import com.example.pix.data.*
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -34,13 +35,39 @@ class AccountSafetyStoreTest {
     }
 
     @Test
+    fun snapshotOfSyncedRowsDoesNotManufactureNewWritesAndMissingRemoteImageIsSafe() = runBlocking {
+        val task = TaskEntity(title = "Already synced")
+        repo.create(task)
+        repo.addImage(TaskImage(taskId = task.id, fileName = "remote-missing.image"))
+        db.syncDao().clear()
+        accounts.protect("synced-test")
+        accounts.wipeUserData()
+        assertTrue(accounts.restoreProtected("synced-test"))
+        assertTrue(db.syncDao().pending().isEmpty())
+        assertEquals("remote-missing.image", repo.details(task.id)!!.images.single().fileName)
+        accounts.deleteProtected("synced-test")
+    }
+
+    @Test
+    fun snapshotPreservesPendingMutationIdsForLostAcknowledgementRetry() = runBlocking {
+        val task = TaskEntity(title = "Pending retry")
+        repo.create(task)
+        val pending = db.syncDao().pending()
+        accounts.protect("pending-test")
+        accounts.wipeUserData()
+        accounts.restoreProtected("pending-test")
+        assertEquals(pending.toSet(), db.syncDao().pending().toSet())
+        accounts.deleteProtected("pending-test")
+    }
+
+    @Test
     fun accountSnapshotRestoresDataImagesOutboxAndOwnerIsolationPayload() = runBlocking {
         val list = ListEntity(name = "A list", color = 2)
         repo.saveList(list)
         val tagId = repo.saveTag("A tag", 3)
-        val task = TaskEntity(title = "Offline A", listId = list.id, durationMinutes = 60)
+        val task = TaskEntity(title = "Offline A", listId = list.id, dueDay = 21000, minuteOfDay = 600, durationMinutes = 60)
         repo.create(task, setOf(tagId))
-        repo.saveSubtask(SubtaskEntity(taskId = task.id, title = "child"))
+        repo.saveChildForTest(TaskEntity(parentTaskId = task.id, title = "child"))
         val image = ImageStore(context).file(newId() + ".image")
         files += image
         image.outputStream().use {
@@ -71,7 +98,7 @@ class AccountSafetyStoreTest {
         assertEquals(task.id, restored.task.id)
         assertEquals(list.id, restored.task.listId)
         assertEquals(tagId, restored.tags.single().id)
-        assertEquals("child", restored.subtasks.single().title)
+        assertEquals("child", restored.visibleChildren.single().title)
         assertEquals(60, restored.task.durationMinutes)
         assertTrue(restored.images.isNotEmpty())
         val restoredImage = ImageStore(context).file(restored.images.single().fileName)

@@ -12,19 +12,44 @@ class CloudSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val app = applicationContext as? PixApplication ?: return Result.success()
         // A scheduled worker may wake before auth restore/account ownership is complete.
         // Never let cloud data touch Room until SessionCoordinator has made that account ready.
-        if (app.session.state.value !is AccountSessionState.Ready) return Result.success()
+        when (val session = app.session.state.value) {
+            is AccountSessionState.Ready -> app.sync.restoreForAccount(session.user.id)
+            AccountSessionState.Restoring, is AccountSessionState.PreparingAccount ->
+                return if (runAttemptCount < 5) Result.retry() else Result.failure()
+            else -> return Result.success()
+        }
+        if (!inputData.getBoolean("manual", false) && SyncRetryPolicy.blocked(app.sync.status.value)) return Result.failure()
         return try {
-            if (app.sync.synchronize()) Result.success() else Result.retry()
+            if (app.sync.synchronize()) Result.success()
+            else if (SyncRetryPolicy.retry(app.sync.status.value, runAttemptCount)) Result.retry() else Result.failure()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            Log.w("PcixSync", "worker failed")
-            Result.retry()
+            Log.w("PcixSync", "worker failed before completion")
+            if (runAttemptCount < 5) Result.retry() else Result.failure()
         }
     }
 }
 
 object CloudSyncWork {
+    private val manualMutex = kotlinx.coroutines.sync.Mutex()
+
+    /** Enqueue before leaving Settings: WorkManager owns the operation, not the Composable. */
+    suspend fun requestNow(context: Context) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        manualMutex.lock()
+        try {
+            val manager = WorkManager.getInstance(context)
+            val current = manager.getWorkInfosForUniqueWork("cloud-sync").get()
+            val app = context.applicationContext as PixApplication
+            if (current.any { it.state == WorkInfo.State.RUNNING } && !SyncRetryPolicy.blocked(app.sync.status.value)) return@withContext
+            manager.enqueueUniqueWork("cloud-sync", ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<CloudSyncWorker>()
+                    .setInputData(workDataOf("manual" to true))
+                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()).result.get()
+        } finally { manualMutex.unlock() }
+    }
+
     fun enqueue(context: Context) {
         WorkManager.getInstance(context)
             .enqueueUniqueWork(

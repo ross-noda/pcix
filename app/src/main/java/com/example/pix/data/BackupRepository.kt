@@ -27,7 +27,6 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 "tags",
                 "recurring_series",
                 "task_tags",
-                "subtasks",
                 "task_images",
                 "reminder_receipts",
             )
@@ -56,8 +55,8 @@ class BackupRepository(private val context: Context, private val database: PixDa
                     val sql = database.openHelper.writableDatabase
                     JSONObject()
                         .put("format", "pcix-backup")
-                        .put("version", 1)
-                        .put("schema", 6)
+                        .put("version", 2)
+                        .put("schema", 9)
                         .put(
                             "tables",
                             JSONObject().apply {
@@ -90,6 +89,10 @@ class BackupRepository(private val context: Context, private val database: PixDa
             require(
                 tables.sumOf { data.getJSONObject("tables").getJSONArray(it).length() } <= 100000
             )
+            // Metadata received from another device may legitimately have no local image bytes.
+            val missingImages = data.getJSONObject("tables").getJSONArray("task_images").objects()
+                .map { it.getString("fileName") }.filter { !images.file(it).isFile }.toSet()
+            data.put("missingImages", JSONArray(missingImages.toList()))
             val bytes = data.toString().toByteArray(Charsets.UTF_8)
             require(bytes.size <= 16 * 1024 * 1024)
             var total = bytes.size.toLong()
@@ -107,6 +110,7 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 names.forEach { name ->
                     require(safeName(name))
                     val file = images.file(name)
+                    if (name in missingImages) return@forEach
                     require(file.isFile && file.length() <= 50L * 1024 * 1024)
                     total += file.length()
                     require(total <= LIMIT)
@@ -154,10 +158,11 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 val data = JSONObject(File(directory, "data.json").readText())
                 require(
                     data.getString("format") == "pcix-backup" &&
-                        data.getInt("version") == 1 &&
-                        data.getInt("schema") in 5..6
+                        ((data.getInt("version") == 1 && data.getInt("schema") in 5..8) ||
+                         (data.getInt("version") == 2 && data.getInt("schema") == 9))
                 )
                 val all = data.getJSONObject("tables")
+                if (data.getInt("version") == 1) convertLegacy(all, data)
                 require(all.keys().asSequence().toSet() == tables.toSet())
                 require(tables.sumOf { all.getJSONArray(it).length() } <= 100000)
                 val imageNames =
@@ -165,8 +170,12 @@ class BackupRepository(private val context: Context, private val database: PixDa
                         .objects()
                         .map { it.getString("fileName") }
                         .toSet()
-                require(names == imageNames.map { "images/$it" }.toSet() + "data.json")
-                imageNames.forEach { name ->
+                val missing = data.optJSONArray("missingImages")?.let { a ->
+                    (0 until a.length()).map { a.getString(it) }.toSet()
+                }.orEmpty()
+                require(missing.all { it in imageNames && safeName(it) })
+                require(names == (imageNames - missing).map { "images/$it" }.toSet() + "data.json")
+                (imageNames - missing).forEach { name ->
                     require(safeName(name))
                     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeFile(File(directory, "images/$name").path, bounds)
@@ -196,7 +205,7 @@ class BackupRepository(private val context: Context, private val database: PixDa
             }
         }
 
-    suspend fun restore(prepared: Prepared) =
+    suspend fun restore(prepared: Prepared, accountSnapshot: Boolean = false) =
         withContext(Dispatchers.IO) {
             val all = JSONObject(prepared.data.getJSONObject("tables").toString())
             val copied = mutableListOf<File>()
@@ -204,6 +213,15 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 val names = mutableMapOf<String, String>()
                 all.getJSONArray("task_images").objects().forEach { row ->
                     val old = row.getString("fileName")
+                    if (!File(prepared.directory, "images/$old").isFile) return@forEach
+                    if (accountSnapshot) {
+                        val dest = images.file(old)
+                        if (!dest.isFile) {
+                            File(prepared.directory, "images/$old").copyTo(dest)
+                            copied.add(dest)
+                        }
+                        return@forEach
+                    }
                     val name =
                         names.getOrPut(old) {
                             val fresh = newId() + ".image"
@@ -214,12 +232,13 @@ class BackupRepository(private val context: Context, private val database: PixDa
                         }
                     row.put("fileName", name)
                 }
-                database.tracked {
+                val replace: suspend () -> Unit = {
                     val sql = database.openHelper.writableDatabase
                     tables.asReversed().forEach { sql.execSQL("DELETE FROM $it") }
                     insert(sql, all)
                     validate(database)
                 }
+                if (accountSnapshot) database.withTransaction { replace() } else database.tracked { replace() }
             } catch (error: Throwable) {
                 copied.forEach { it.delete() }
                 throw error
@@ -243,10 +262,10 @@ class BackupRepository(private val context: Context, private val database: PixDa
                     require(row.keys().asSequence().all { it in columns.keys })
                     statement.clearBindings()
                     columns.entries.forEachIndexed { index, (column, type) ->
-                        val v = if (row.has(column)) row.get(column) else JSONObject.NULL
+                        val v = if (row.has(column)) row.get(column)
+                            else if (column in setOf("createdAt", "updatedAt") && type == "INTEGER") 0L
+                            else JSONObject.NULL
                         when {
-                            v == JSONObject.NULL && type == "INTEGER" ->
-                                statement.bindLong(index + 1, 0)
                             v == JSONObject.NULL -> statement.bindNull(index + 1)
                             type == "INTEGER" -> {
                                 require(v is Int || v is Long)
@@ -275,9 +294,7 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 "SELECT id FROM tasks WHERE isCompleted NOT IN (0,1) OR isTemplate NOT IN (0,1) OR isSkipped NOT IN (0,1) OR matrixUrgent NOT IN (0,1) OR matrixImportant NOT IN (0,1)"
             )
             .use { require(!it.moveToFirst()) }
-        sql.query("SELECT id FROM subtasks WHERE isCompleted NOT IN (0,1)").use {
-            require(!it.moveToFirst())
-        }
+        TaskHierarchy.validateGraph(sql)
         for (table in listOf("lists", "tags")) sql.query(
                 "SELECT id FROM $table WHERE color NOT BETWEEN 0 AND 11"
             )
@@ -296,7 +313,8 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 TaskTiming.validate(task)
                 task.dueDay?.let { require(it in -719162..2932896) }
                 require((task.seriesId == null) == (task.originalDay == null))
-                task.seriesId?.let { require(db.dao().series(it) != null) }
+                // Series tombstones preserve historical tasks. Like Room, the backup permits
+                // a historical seriesId whose series no longer exists.
             }
         }
         sql.query("SELECT * FROM recurring_series").use { c ->
@@ -315,10 +333,33 @@ class BackupRepository(private val context: Context, private val database: PixDa
                     TaskRules.normalizedTag(c.getString(0)) == c.getString(1)
             )
         }
-        for (table in listOf("lists", "subtasks")) sql.query(
+        for (table in listOf("lists")) sql.query(
                 "SELECT ${if(table == "lists") "name" else "title"} FROM $table"
             )
             .use { c -> while (c.moveToNext()) require(c.getString(0).isNotBlank()) }
+    }
+
+    private fun convertLegacy(all: JSONObject, data: JSONObject) {
+        require(all.keys().asSequence().toSet() == tables.toSet() + "subtasks")
+        val tasks = all.getJSONArray("tasks")
+        val parents = tasks.objects().associateBy { it.getString("id") }
+        val converted = JSONArray()
+        all.getJSONArray("subtasks").objects().forEach { old ->
+            val parent = requireNotNull(parents[old.getString("taskId")])
+            val id = TaskHierarchy.legacyId(old.getString("id"))
+            require(id !in parents)
+            tasks.put(JSONObject().apply {
+                put("id",id); put("title",old.getString("title")); put("notes","")
+                put("listId",parent.getString("listId"))
+                put("parentTaskId",if(parent.optInt("isTemplate")==0 && parent.optInt("isSkipped")==0) parent.getString("id") else JSONObject.NULL)
+                put("isCompleted",old.getInt("isCompleted")); put("completedAt",if(old.getInt("isCompleted")==1) old.getLong("updatedAt") else JSONObject.NULL)
+                put("priority",0); put("isTemplate",0); put("isSkipped",0)
+                listOf("sortOrder","createdAt","updatedAt").forEach { put(it,old.getLong(it)) }
+            })
+            converted.put(id)
+        }
+        all.remove("subtasks")
+        data.put("convertedTaskIds",converted)
     }
 
     private fun safeName(name: String) = name.matches(Regex("[A-Za-z0-9_-]+\\.image"))

@@ -19,9 +19,9 @@ class GoogleCalendarSyncWorker(context: Context, params: WorkerParameters) :
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            Log.w("PcixGoogle", "calendar sync failed")
-            Result.retry()
+        } catch (error: Exception) {
+            app.google.reportFailure(error, "worker")
+            if (app.google.connection.value.issue != GoogleCalendarRepository.Issue.Network || runAttemptCount >= 4) Result.failure() else Result.retry()
         }
     }
 }

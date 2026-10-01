@@ -7,8 +7,6 @@ import android.content.IntentSender
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.identity.RevokeAccessRequest
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.tasks.await
 
@@ -43,34 +41,26 @@ internal class PlayServicesGoogleAuthorizationGateway(context: Context) : Google
     ): GoogleAuthorizationResult {
         val builder =
             AuthorizationRequest.builder()
-                .setRequestedScopes(if (accountEmail == null) CONNECT_SCOPES else CALENDAR_SCOPES)
+                .setRequestedScopes(if (interactive) CONNECT_SCOPES else CALENDAR_SCOPES)
         if (accountEmail != null) {
             builder.setAccount(Account(accountEmail, GOOGLE_ACCOUNT_TYPE))
-        } else if (interactive) {
-            builder.setPrompt(AuthorizationRequest.Prompt.SELECT_ACCOUNT)
         }
-        val result =
-            try {
-                client.authorize(builder.build()).await()
-            } catch (error: ApiException) {
-                // A missing/revoked grant or account is a reconnect condition, not a reason for a
-                // background retry loop. Only genuinely transient Play-services failures bubble up.
-                if (error.statusCode in TRANSIENT_STATUS_CODES) throw error
-                return GoogleAuthorizationResult.Unavailable
-            }
+        val result = client.authorize(builder.build()).await()
         if (result.hasResolution()) {
             val sender =
                 result.pendingIntent?.intentSender ?: return GoogleAuthorizationResult.Unavailable
             return GoogleAuthorizationResult.Resolution(sender)
         }
-        return result.accessToken?.takeIf { it.isNotBlank() }
-            ?.let(GoogleAuthorizationResult::Authorized)
-            ?: GoogleAuthorizationResult.Unavailable
+        return authorized(result)
     }
 
     override fun complete(data: Intent): GoogleAuthorizationResult.Authorized? =
-        client.getAuthorizationResultFromIntent(data).accessToken?.takeIf { it.isNotBlank() }
-            ?.let(GoogleAuthorizationResult::Authorized)
+        authorized(client.getAuthorizationResultFromIntent(data))
+
+    private fun authorized(result: com.google.android.gms.auth.api.identity.AuthorizationResult): GoogleAuthorizationResult.Authorized {
+        if (result.hasResolution()) throw CalendarPermissionException()
+        return validateCalendarGrant(result.accessToken, result.grantedScopes)
+    }
 
     override suspend fun revokeCalendarAccess(accountEmail: String) {
         client
@@ -91,12 +81,16 @@ internal class PlayServicesGoogleAuthorizationGateway(context: Context) : Google
                 Scope("https://www.googleapis.com/auth/calendar.events.readonly"),
             )
         val CONNECT_SCOPES = CALENDAR_SCOPES + listOf(Scope("openid"), Scope("email"))
-        val TRANSIENT_STATUS_CODES =
-            setOf(
-                CommonStatusCodes.NETWORK_ERROR,
-                CommonStatusCodes.TIMEOUT,
-                CommonStatusCodes.INTERRUPTED,
-                CommonStatusCodes.INTERNAL_ERROR,
-            )
+
     }
+}
+
+internal class CalendarPermissionException : Exception("Calendar scopes or token missing")
+
+/** Validate both grants even when Google returns a token after partial consent. */
+internal fun validateCalendarGrant(token: String?, scopes: List<String>): GoogleAuthorizationResult.Authorized {
+    val required = listOf("https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+        "https://www.googleapis.com/auth/calendar.events.readonly")
+    if (token.isNullOrBlank() || !scopes.containsAll(required)) throw CalendarPermissionException()
+    return GoogleAuthorizationResult.Authorized(token)
 }

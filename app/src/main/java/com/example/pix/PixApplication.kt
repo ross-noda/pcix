@@ -9,8 +9,11 @@ import com.example.pix.google.GoogleCalendarWork
 import com.example.pix.reminders.*
 import com.example.pix.widget.TaskWidgetUpdater
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class PixApplication : Application() {
+    private val accountMutationMutex = Mutex()
     val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val database by lazy { PixDatabase.create(this) }
     val scheduler by lazy { ReminderScheduler(this) }
@@ -20,9 +23,15 @@ class PixApplication : Application() {
     val auth by lazy { AuthRepository(this, cloud, http) }
     val remote by lazy { RemoteDataSource(cloud, http) }
     val accounts by lazy { AccountStore(this, database) }
-    val session by lazy { SessionCoordinator(auth, accounts, backgroundScope) }
-    val sync by lazy {
-        SyncEngine(database, auth, remote) { ReminderWork.reconcile(this) }
+    val session: SessionCoordinator by lazy {
+        SessionCoordinator(auth, accounts, backgroundScope, localTransition = { block ->
+            sync.withSyncPaused { accountMutationMutex.withLock { block() } }
+        })
+    }
+    val sync: SyncEngine by lazy {
+        SyncEngine(database, auth, remote, accountReady = { id ->
+            accounts.owner() == id && (session.state.value as? AccountSessionState.Ready)?.user?.id == id
+        }) { ReminderWork.reconcile(this) }
     }
     val accountLifecycle by lazy {
         AccountLifecycleManager(
@@ -30,6 +39,11 @@ class PixApplication : Application() {
             syncNow = { sync.synchronize() },
             signOutLocal = { auth.signOut() },
             deleteRemote = { auth.deleteAccount() },
+            localTransition = { block ->
+                sync.withSyncPaused {
+                    accountMutationMutex.withLock { withContext(NonCancellable) { block() } }
+                }
+            },
             beforeLocalClear = {
                 // Pcix account lifecycle is intentionally independent from Google Calendar.
                 CloudSyncWork.cancel(this)
@@ -43,6 +57,8 @@ class PixApplication : Application() {
             database,
             { ReminderWork.reconcile(this) },
             { if (cloud.configured) CloudSyncWork.enqueue(this) },
+            accountMutex = accountMutationMutex,
+            canMutate = { !cloud.configured || session.state.value is AccountSessionState.Ready },
         )
     }
 
@@ -67,7 +83,7 @@ class PixApplication : Application() {
                 session.state.collect { state ->
                     if (state is AccountSessionState.Ready) {
                         sync.restoreForAccount(state.user.id)
-                        CloudSyncWork.enqueue(this@PixApplication)
+                        CloudSyncWork.initialize(this@PixApplication)
                     }
                 }
             }

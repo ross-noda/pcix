@@ -68,6 +68,7 @@ fun TaskImages(images: List<TaskImage>, model: TasksViewModel) {
 @Composable
 private fun ImagePreview(item: TaskImage, modifier: Modifier) {
     val context = LocalContext.current
+    var loaded by remember(item.fileName) { mutableStateOf(false) }
     val bitmap by
         produceState<android.graphics.Bitmap?>(null, item.fileName) {
             value =
@@ -122,6 +123,7 @@ private fun ImagePreview(item: TaskImage, modifier: Modifier) {
                         }
                         .getOrNull()
                 }
+            loaded = true
         }
     if (bitmap != null)
         Image(
@@ -133,7 +135,7 @@ private fun ImagePreview(item: TaskImage, modifier: Modifier) {
     else
         Box(modifier) {
             Text(
-                stringResource(R.string.image_loading),
+                stringResource(if (loaded) R.string.image_unavailable_here else R.string.image_loading),
                 Modifier.padding(16.dp),
                 style = MaterialTheme.typography.bodySmall,
             )

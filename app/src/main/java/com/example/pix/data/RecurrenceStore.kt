@@ -9,9 +9,7 @@ internal class RecurrenceStore(private val dao: PixDao) {
     suspend fun copyRelations(from: String, to: String) {
         dao.images(from).forEach { dao.insertImage(it.copy(id = newId(), taskId = to)) }
         dao.tagIds(from).forEach { dao.attachTag(TaskTagCrossRef(to, it)) }
-        dao.subtasks(from).forEach {
-            dao.saveSubtask(it.copy(id = newId(), taskId = to, isCompleted = false))
-        }
+
     }
 
     suspend fun start(
@@ -124,7 +122,7 @@ internal class RecurrenceStore(private val dao: PixDao) {
         }
     }
 
-    suspend fun refreshSubtaskTemplate(taskId: String, scope: RecurrenceScope) {
+    suspend fun refreshTemplate(taskId: String, scope: RecurrenceScope) {
         if (scope != RecurrenceScope.THIS_AND_FUTURE) return
         val task = dao.task(taskId) ?: return
         val series = task.seriesId?.let { dao.series(it) } ?: return

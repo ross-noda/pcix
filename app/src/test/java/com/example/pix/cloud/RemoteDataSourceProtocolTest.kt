@@ -68,7 +68,7 @@ class RemoteDataSourceProtocolTest {
     }
 
     @Test
-    fun malformedOrNonMonotonicRemotePageFailsClosed() = runBlocking {
+    fun malformedOrNonMonotonicRemotePageFailsClosed() = runBlocking<Unit> {
         val missingPayload = FakeHttp().apply {
             responses +=
                 CloudHttp.Response(

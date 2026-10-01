@@ -34,14 +34,18 @@ class QuickAddTest {
                 rule.activity.getString(R.string.completed_description, name)
             )
             .performClick()
-        rule.onNodeWithText(rule.activity.getString(R.string.undo)).performClick()
+        val undo = rule.activity.getString(R.string.undo)
+        rule.waitUntil(5000) {
+            rule.onAllNodesWithText(undo, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithText(undo, useUnmergedTree = true).performClick()
         rule.waitUntil(5000) {
             runBlocking {
                 (rule.activity.application as PixApplication)
                     .repository
                     .observe(TaskFilter(mode = "ALL"), ZonedDateTime.now())
                     .first()
-                    .any { it.task.title == name }
+                    .any { it.task.title == name && !it.task.isCompleted }
             }
         }
         rule.onNodeWithTag("task-list").performScrollToNode(hasText(name))

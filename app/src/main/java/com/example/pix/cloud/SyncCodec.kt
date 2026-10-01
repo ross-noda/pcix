@@ -29,6 +29,7 @@ object SyncCodec {
             .put("id", row.id)
             .put("title", row.title)
             .put("notes", row.notes)
+            .put("parent_task_id", row.parentTaskId ?: JSONObject.NULL)
             .put("list_id", row.listId)
             .put("due_day", row.dueDay ?: JSONObject.NULL)
             .put("minute_of_day", row.minuteOfDay ?: JSONObject.NULL)
@@ -42,16 +43,6 @@ object SyncCodec {
             .put("original_day", row.originalDay ?: JSONObject.NULL)
             .put("is_template", row.isTemplate)
             .put("is_skipped", row.isSkipped)
-            .put("sort_order", row.sortOrder)
-            .put("created_at", row.createdAt)
-            .put("updated_at", row.updatedAt)
-
-    fun subtask(row: SubtaskEntity) =
-        JSONObject()
-            .put("id", row.id)
-            .put("task_id", row.taskId)
-            .put("title", row.title)
-            .put("is_completed", row.isCompleted)
             .put("sort_order", row.sortOrder)
             .put("created_at", row.createdAt)
             .put("updated_at", row.updatedAt)
@@ -104,6 +95,7 @@ object SyncCodec {
             id = row.getString("id"),
             title = row.getString("title"),
             notes = row.optString("notes"),
+            parentTaskId = row.nullableString("parent_task_id"),
             listId = row.getString("list_id"),
             dueDay = row.nullableLong("due_day"),
             minuteOfDay = row.nullableInt("minute_of_day"),
@@ -117,17 +109,6 @@ object SyncCodec {
             originalDay = row.nullableLong("original_day"),
             isTemplate = row.optBoolean("is_template"),
             isSkipped = row.optBoolean("is_skipped"),
-            sortOrder = row.optLong("sort_order"),
-            createdAt = row.optLong("created_at"),
-            updatedAt = row.optLong("updated_at"),
-        )
-
-    fun parseSubtask(row: JSONObject) =
-        SubtaskEntity(
-            id = row.getString("id"),
-            taskId = row.getString("task_id"),
-            title = row.getString("title"),
-            isCompleted = row.optBoolean("is_completed"),
             sortOrder = row.optLong("sort_order"),
             createdAt = row.optLong("created_at"),
             updatedAt = row.optLong("updated_at"),

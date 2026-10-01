@@ -252,7 +252,7 @@ fun CalendarScreen(
         }
         items(
             googleEvents.filter { selectedDay in it.startDay until it.endDay },
-            key = { "g-" + it.id },
+            key = { "g-" + it.stableKey },
         ) { event ->
             GoogleEventRow(event) { openGoogle(event) }
         }

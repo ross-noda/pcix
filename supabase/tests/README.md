@@ -1,6 +1,6 @@
 # Supabase backend tests
 
-These tests are intentionally reproducible SQL rather than claimed live results. The reviewed source tree does not contain a Supabase project reference, database URL, access token, Supabase CLI installation, or a linked local stack, so no real project was available in the audit environment.
+These tests are intentionally reproducible SQL rather than claimed live results. Public app configuration is available locally, but administrative database access is not. Local PostgreSQL tests do not certify the deployed Supabase project.
 
 ## 1. Apply migrations
 
@@ -16,6 +16,8 @@ The expected order is:
 0001_pcix_cloud.sql
 0002_sync_protocol_v2.sql
 0003_backend_hardening.sql
+0004_explicit_tag_reattach.sql
+0005_task_hierarchy.sql
 ```
 
 ## 2. Schema/security assertions
@@ -79,3 +81,11 @@ Expected first response: HTTP 200 with `{"ok":true}`. Database rows owned by tha
 A malformed/expired token must produce 401 and must **not** be mapped to `already_deleted`. An idempotent call made with a still-valid token whose Auth user is already absent may produce 404 `{"code":"already_deleted"}`; this is the explicit confirmation Android accepts before clearing local account data.
 
 Do not put `SUPABASE_SERVICE_ROLE_KEY` in the APK, `local.properties`, Gradle BuildConfig, or any client-visible file.
+
+## Audit25 settembre 2026
+
+I tre script SQL sono passati su PostgreSQL 18.6 locale con auth.uid/auth.users di test; non è un deployment Supabase. Il progetto reale fornito risponde ad Auth settings, ma GET tasks e pcix_sync_snapshot restituiscono404. Vedere docs/VERIFICATION.md.
+
+## 5. Task hierarchy (migration 0005)
+
+Run `backend_hierarchy.sql` with the same disposable `user_a` variable. It checks independent completion, one-level canonicalization, preserved children after parent deletion, retry ACKs and stale parent references. The transaction rolls back. Update all clients before enabling child tasks; legacy subtask writes are rejected.

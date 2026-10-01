@@ -61,13 +61,13 @@ class RepositoryTest {
     fun editDoesNotRevertCompletionAndSubtasksAreIndependent() = runBlocking {
         val task = TaskEntity(title = "Parent")
         repository.create(task)
-        repository.saveSubtask(SubtaskEntity(taskId = task.id, title = "Child", isCompleted = true))
+        repository.saveChildForTest(TaskEntity(parentTaskId = task.id, title = "Child", isCompleted = true))
         assertFalse(repository.task(task.id).first()!!.task.isCompleted)
         repository.complete(task.id, true)
         repository.edit(task.copy(title = "Updated"), emptySet())
         assertTrue(repository.task(task.id).first()!!.task.isCompleted)
         repository.delete(task.id)
-        assertTrue(db.dao().subtasks(task.id).isEmpty())
+        assertTrue(db.dao().children(task.id).isEmpty())
     }
 
     @Test
@@ -102,10 +102,12 @@ class RepositoryTest {
         val task = TaskEntity(title = "Original")
         val tag = repository.saveTag("Tag", 0)
         repository.create(task, setOf(tag))
-        repository.saveSubtask(SubtaskEntity(taskId = task.id, title = "Child"))
+        repository.saveChildForTest(TaskEntity(parentTaskId = task.id, title = "Child"))
         repository.duplicate(task.id)
         val copies = repository.observe(TaskFilter(mode = "ALL"), ZonedDateTime.now()).first()
-        assertEquals(2, copies.size)
-        assertTrue(copies.all { it.tags.size == 1 && it.subtasks.size == 1 })
+        assertEquals(3, copies.size)
+        assertTrue(copies.filter { it.task.parentTaskId==null }.all { it.tags.size==1 })
+        assertEquals(1,copies.single { it.task.id==task.id }.visibleChildren.size)
+        assertTrue(copies.single { it.task.id!=task.id && it.task.parentTaskId==null }.visibleChildren.isEmpty())
     }
 }

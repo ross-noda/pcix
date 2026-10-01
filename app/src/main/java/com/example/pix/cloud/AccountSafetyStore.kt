@@ -1,6 +1,7 @@
 package com.example.pix.cloud
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.example.pix.data.BackupRepository
 import com.example.pix.data.PixDatabase
 import com.example.pix.data.SyncOutboxEntity
@@ -30,6 +31,7 @@ class AccountSafetyStore(
         val target = dir(ownerId)
         val temp = File(root, target.name + ".tmp-${System.nanoTime()}").apply { mkdirs() }
         try {
+            db.withTransaction {
             File(temp, "data.zip").outputStream().buffered().use { backups.export(it) }
             val pending = db.syncDao().pending()
             val states = db.syncDao().states()
@@ -40,6 +42,7 @@ class AccountSafetyStore(
                 .put("state", JSONArray().apply { states.forEach { put(it.toJson()) } })
                 .put("versions", JSONArray().apply { versions.forEach { put(it.toJson()) } })
             File(temp, "sync.json").writeText(sync.toString())
+            }
             File(temp, "complete").writeText("1")
             if (target.exists()) target.deleteRecursively()
             check(temp.renameTo(target)) { "Unable to commit account safety snapshot" }
@@ -57,18 +60,23 @@ class AccountSafetyStore(
             return@withContext false
         }
         val prepared = archive.inputStream().buffered().use { backups.prepare(it) }
-        backups.restore(prepared)
         val sync = JSONObject(syncFile.readText())
         require(sync.getString("owner") == ownerId)
+        db.withTransaction {
+        val convertedIds = prepared.data.optJSONArray("convertedTaskIds")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
+        backups.restore(prepared, accountSnapshot = true)
         db.syncDao().clear()
         db.syncDao().clearState()
         db.syncDao().clearAllVersions()
         sync.getJSONArray("outbox").objects().forEach { db.syncDao().insert(it.toOutbox()) }
         sync.getJSONArray("state").objects().forEach { db.syncDao().saveState(it.toState()) }
         sync.optJSONArray("versions")?.objects()?.forEach { db.syncDao().saveVersion(it.toVersion()) }
-        // Backup restore may rename local image files. Re-enqueue current entities so UPSERT
-        // payloads exactly describe the restored Room state; DELETE rows remain preserved.
-        OutboxRecorder(db).enqueueAll()
+        if (convertedIds.isNotEmpty() || db.syncDao().pending().any { it.entityType == "subtasks" }) {
+            com.example.pix.data.TaskHierarchy.upgradeLegacyOutbox(db.openHelper.writableDatabase, convertedIds.mapNotNull { db.dao().task(it) })
+        }
+        }
+        // Restoring a cache is not a new user edit: preserve pending mutation ids verbatim and
+        // let the next pull fetch newer server state instead of re-uploading stale cached rows.
         true
     }
 

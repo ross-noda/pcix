@@ -114,15 +114,15 @@ class AuthSessionTest {
     }
 
     @Test
-    fun api401WithNetworkFailureDuringForcedRefreshInvalidatesSession() = runBlocking {
+    fun api401WithNetworkFailureDuringForcedRefreshPreservesSession() = runBlocking {
         val store = FakeSessionStore(session(expiresAt = 5_000))
         val api = FakeAuthApi().apply { authFailure = IOException("offline") }
         val repo = AuthRepository(config, api, store, nowSeconds = { 1_000 })
         repo.restore()
 
-        assertNull(repo.recoverFromUnauthorized())
-        assertNull(store.value)
-        assertEquals(AuthState.Unauthenticated, repo.state.value)
+        assertThrows(IOException::class.java) { runBlocking { repo.recoverFromUnauthorized() } }
+        assertNotNull(store.value)
+        assertEquals(AuthState.Authenticated(user), repo.state.value)
     }
 
     @Test
@@ -179,7 +179,7 @@ class AuthSessionTest {
 
         assertTrue(repo.signUp("a@example.com", "password").isSuccess)
         assertNull(store.value)
-        assertEquals(AuthState.Unauthenticated, repo.state.value)
+        assertEquals(AuthState.AwaitingEmail("a@example.com"), repo.state.value)
     }
 
     @Test
@@ -385,6 +385,17 @@ class AuthSessionTest {
     private fun session(expiresAt: Long) =
         AuthSession("access-old", "refresh-old", expiresAt, user)
 
+    @Test fun deleteAccountRequiresStructuredConfirmationEvenOnHttpSuccess() = runBlocking {
+        for (body in listOf("", "{}", "<html>ok</html>", "{\"ok\":false}")) {
+            val store = FakeSessionStore(session(expiresAt = 5_000))
+            val api = FakeAuthApi().apply { requestResponses.add(response(200, body)) }
+            val repo = AuthRepository(config, api, store, nowSeconds = { 1_000 })
+            repo.restore()
+            assertTrue(repo.deleteAccount().isFailure)
+            assertNotNull(store.value)
+        }
+    }
+
     private fun tokenResponse(access: String, refresh: String, expiresAt: Long) =
         response(
             200,
@@ -396,6 +407,83 @@ class AuthSessionTest {
                 .toString(),
         )
 
+    @Test fun signupPkceAndPendingStateSurviveRepositoryRecreation() = runBlocking {
+        val api = FakeAuthApi().apply { authResponses.add(response(200,"{}")) }
+        val store = FakeSessionStore()
+        val verifier = "a".repeat(43)
+        val repo = AuthRepository(config,api,store,nowSeconds={1000},newPkceVerifier={verifier})
+        assertTrue(repo.signUp(" a@example.com ","password").isSuccess)
+        assertEquals("/signup?redirect_to=com.example.pix%3A%2F%2Fauth%2Fcallback",api.authCalls.single().path)
+        val body = JSONObject(api.authCalls.single().body)
+        assertEquals("s256",body.getString("code_challenge_method"))
+        assertEquals(Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray())),body.getString("code_challenge"))
+        val recreated = AuthRepository(config,api,store,nowSeconds={1000})
+        recreated.restore()
+        assertEquals(AuthState.AwaitingEmail("a@example.com"),recreated.state.value)
+        api.authResponses.add(tokenResponse("confirmed-access","confirmed-refresh",7000))
+        assertTrue(recreated.handleDeeplink("com.example.pix://auth/callback?code=confirmation").isSuccess)
+        assertEquals(AuthState.Authenticated(user),recreated.state.value)
+        assertFalse(store.value!!.recoveryPending)
+        assertNull(store.signupVerifier())
+        assertEquals(verifier,JSONObject(api.authCalls.last().body).getString("code_verifier"))
+    }
+
+    @Test fun resendUsesSignupRedirectAndKeepsRecoveryFlowSeparate() = runBlocking {
+        val api=FakeAuthApi().apply { authResponses.add(response(200,"{}")) }
+        val store=FakeSessionStore().apply { verifier="recovery-verifier" }
+        val repo=AuthRepository(config,api,store,newPkceVerifier={"signup-verifier"})
+        assertTrue(repo.resendConfirmation("a@example.com").isSuccess)
+        assertEquals("/resend?redirect_to=com.example.pix%3A%2F%2Fauth%2Fcallback",api.authCalls.single().path)
+        assertEquals("signup",JSONObject(api.authCalls.single().body).getString("type"))
+        assertEquals("recovery-verifier",store.recoveryVerifier())
+        assertEquals("signup-verifier",store.signupVerifier())
+    }
+
+    @Test fun callbackRejectsUnexpectedRoutesTokensAndMalformedCodes() = runBlocking {
+        for (link in listOf("com.example.pix://auth/callback-evil?code=x","com.example.pix://auth/callback?code=%ZZ","com.example.pix://auth/callback#access_token=x&refresh_token=y","com.example.pix://auth/callback?error=access_denied","com.example.pix://auth/callback?code=x")) {
+            val api=FakeAuthApi(); val store=FakeSessionStore()
+            val repo=AuthRepository(config,api,store)
+            assertTrue(link,repo.handleDeeplink(link).isFailure)
+            assertNull(store.value); assertTrue(api.authCalls.isEmpty())
+        }
+    }
+
+    @Test fun offlineCallbackKeepsVerifierForRetry() = runBlocking {
+        val api=FakeAuthApi().apply { authFailure=IOException("offline") }
+        val store=FakeSessionStore().apply { writeSignup("verifier","a@example.com") }
+        val repo=AuthRepository(config,api,store,nowSeconds={1000})
+        assertTrue(repo.handleDeeplink("com.example.pix://auth/callback?code=x").isFailure)
+        assertEquals(R.string.auth_offline,(repo.state.value as AuthState.Error).messageRes)
+        assertEquals("verifier",store.signupVerifier())
+        api.authFailure=null; api.authResponses.add(tokenResponse("access","refresh",7000))
+        assertTrue(repo.handleDeeplink("com.example.pix://auth/callback?code=x").isSuccess)
+        assertEquals(AuthState.Authenticated(user),repo.state.value)
+    }
+
+    @Test fun registrationValidationAndProviderErrorsAreSpecific() {
+        assertEquals(R.string.auth_invalid_email,AuthValidation.registration("bad@","password","password"))
+        assertEquals(R.string.auth_weak_password,AuthValidation.registration("a@example.com","123","123"))
+        assertEquals(R.string.auth_password_mismatch,AuthValidation.registration("a@example.com","123456","other"))
+        assertNull(AuthValidation.registration("a@example.com","123456","123456"))
+        assertEquals(R.string.auth_email_unconfirmed,AuthErrors.map(400,"email_not_confirmed"))
+        assertEquals(R.string.auth_google_provider,AuthErrors.map(400,"provider_disabled"))
+        assertEquals(R.string.auth_google_token,AuthErrors.map(400,"invalid id token"))
+        assertEquals(R.string.auth_invalid_callback,AuthErrors.map(400,"flow_state_expired"))
+        assertEquals(R.string.auth_rate_limited,AuthErrors.map(429,"rate_limit"))
+        assertEquals(R.string.auth_google_cancelled,GoogleAuthErrors.message(androidx.credentials.exceptions.GetCredentialCancellationException()))
+        assertEquals(R.string.auth_google_configuration,GoogleAuthErrors.message(androidx.credentials.exceptions.GetCredentialProviderConfigurationException()))
+        assertEquals(R.string.auth_google_no_account,GoogleAuthErrors.message(androidx.credentials.exceptions.NoCredentialException()))
+    }
+
+    @Test fun replayedCallbackCannotSignOutAnExistingSession() = runBlocking {
+        val store=FakeSessionStore(session(expiresAt=7000))
+        val repo=AuthRepository(config,FakeAuthApi(),store,nowSeconds={1000})
+        repo.restore()
+        assertTrue(repo.handleDeeplink("com.example.pix://auth/callback?code=already-consumed").isFailure)
+        assertEquals(AuthState.Authenticated(user),repo.state.value)
+        assertNotNull(store.value)
+    }
+
     private fun response(code: Int, body: String) = CloudHttp.Response(code, body, emptyMap())
 }
 
@@ -405,6 +493,12 @@ private class FakeSessionStore(initial: AuthSession? = null) : SessionStore {
     override fun read() = value
     override fun write(session: AuthSession) { value = session }
     override fun clear() { value = null; verifier = null }
+    private var signupCode: String? = null
+    private var signupAddress: String? = null
+    override fun signupVerifier() = signupCode
+    override fun signupEmail() = signupAddress
+    override fun writeSignup(verifier: String, email: String) { signupCode = verifier; signupAddress = email }
+    override fun clearSignup() { signupCode = null; signupAddress = null }
     override fun recoveryVerifier() = verifier
     override fun writeRecoveryVerifier(verifier: String) { this.verifier = verifier }
     override fun clearRecoveryVerifier() { verifier = null }

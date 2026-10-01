@@ -47,8 +47,9 @@ fun taskShareIntent(context: Context, detail: TaskWithDetails): Intent {
             appendLine()
             appendLine(task.notes)
         }
-        detail.subtasks
-            .sortedWith(compareBy<SubtaskEntity> { it.isCompleted }.thenBy { it.sortOrder })
+        if(detail.visibleChildren.isNotEmpty()) appendLine(context.getString(R.string.child_tasks))
+        detail.visibleChildren
+            .sortedWith(compareBy<TaskEntity> { it.isCompleted }.thenBy { it.sortOrder })
             .forEach { appendLine((if (it.isCompleted) "[x] " else "[ ] ") + it.title) }
         detail.series?.let { appendLine(context.getString(R.string.recurrence) + ": " + it.rule) }
     }

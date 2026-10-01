@@ -21,12 +21,15 @@ class AccountLifecycleManager(
     private val signOutLocal: suspend () -> Unit,
     private val deleteRemote: suspend () -> Result<DeleteAccountConfirmation>,
     private val beforeLocalClear: suspend () -> Unit = {},
+    private val localTransition: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     suspend fun logout(allowPendingSnapshot: Boolean = false): LogoutOutcome {
         val owner = accounts.owner()
             ?: return try {
                 signOutLocal()
                 LogoutOutcome.Completed
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (error: Throwable) {
                 LogoutOutcome.Failed(error)
             }
@@ -38,12 +41,16 @@ class AccountLifecycleManager(
             }
             // Always keep a recovery copy before clearing Room. Besides pending mutations this
             // protects local-only attachments and reminder state that cloud sync cannot recreate.
-            accounts.protect(owner)
-            beforeLocalClear()
-            signOutLocal()
-            accounts.wipeUserData()
-            accounts.setOwner(null)
+            localTransition {
+                accounts.protect(owner)
+                beforeLocalClear()
+                signOutLocal()
+                accounts.wipeUserData()
+                accounts.setOwner(null)
+            }
             LogoutOutcome.Completed
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (error: Throwable) {
             LogoutOutcome.Failed(error)
         }
@@ -58,12 +65,16 @@ class AccountLifecycleManager(
                 DeleteAccountConfirmation.AlreadyDeleted -> Unit
             }
             // Only an explicit backend confirmation reaches this point.
-            beforeLocalClear()
-            signOutLocal()
-            accounts.wipeUserData()
-            accounts.setOwner(null)
-            if (owner != null) accounts.deleteProtected(owner)
+            localTransition {
+                beforeLocalClear()
+                signOutLocal()
+                accounts.wipeUserData()
+                accounts.setOwner(null)
+                if (owner != null) accounts.deleteProtected(owner)
+            }
             DeleteOutcome.Completed
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (error: Throwable) {
             DeleteOutcome.Failed(error)
         }

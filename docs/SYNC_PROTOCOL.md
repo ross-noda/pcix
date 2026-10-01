@@ -186,3 +186,16 @@ La riconciliazione viene anche schedulata all'avvio dell'app, quindi un process-
 - `pcix_sync_changes`: change stream account-wide keyset-paginabile.
 
 Le scritture dirette `INSERT/UPDATE/DELETE` sulle sette tabelle sincronizzate vengono revocate al ruolo `authenticated`; il client scrive tramite `pcix_apply_mutation`. Le SELECT RLS rimangono disponibili per diagnostica.
+
+## Correzioni audit 24 settembre 2026
+
+ACK APPLIED rimuove l'id outbox inviato, ma non registra quella versione come già applicata: la riga canonica può differire dal payload (per esempio list_id corretto in Inbox). Il pull la applica sempre, salvo una mutazione locale più recente ancora pending.
+
+Eccezione controllata alle tombstone terminali: task_tags ha identità composta, non un UUID rigenerabile. Una nuova associazione locale allega restore_after_version solo se la cancellazione è già nota in Room. La migration 0004 accetta il ripristino esclusivamente se coincide con la versione esatta della tombstone server; UPSERT offline ignari o token di cancellazioni precedenti restano rifiutati. I parent devono comunque essere vivi. Retry con lo stesso mutation_id restituisce lo stesso ACK.
+
+Restore snapshot account conserva la outbox originale (anche gli id per retry dopo risposta persa) senza riaccodare righe già sincronizzate. Cambio account/logout e sync sono mutuamente esclusivi; la sync verifica Ready e ownership prima di accedere al backend.
+
+
+## Estensione gerarchia — Room9 / SQL0005
+
+La sezione precedente descrive anche il protocollo legacy. I client aggiornati non scrivono più `subtasks`: usano `tasks.parent_task_id`, con madri prima delle figlie negli UPSERT. SQL0005 converte i dati legacy con UUID deterministici e mantiene la vecchia tabella come archivio; rifiuta le sue nuove mutazioni. Eliminare/saltare una madre scollega le figlie con modifiche canoniche individuali. Un riferimento concorrente incompatibile viene normalizzato a radice, preservando la Task. Pull completo atomico e validazione del grafo precedono l’avanzamento checkpoint. Tutti i client devono essere aggiornati. Vedere [rapporto gerarchia](MARKDOWN_HIERARCHY_REPORT.md).

@@ -15,6 +15,10 @@ internal interface SessionStore {
     fun read(): AuthSession?
     fun write(session: AuthSession)
     fun clear()
+    fun signupVerifier(): String?
+    fun signupEmail(): String?
+    fun writeSignup(verifier: String, email: String)
+    fun clearSignup()
     fun recoveryVerifier(): String?
     fun writeRecoveryVerifier(verifier: String)
     fun clearRecoveryVerifier()
@@ -73,9 +77,18 @@ internal class SecureSessionStore(context: Context) : SessionStore {
     }
 
     override fun clear() {
-        securePrefs.edit().remove(KEY_CIPHERTEXT).remove(KEY_RECOVERY_VERIFIER).commit()
+        securePrefs.edit().remove(KEY_CIPHERTEXT).remove(KEY_RECOVERY_VERIFIER).remove("signup").commit()
         legacyPrefs.edit().remove(LEGACY_KEY_SESSION).commit()
     }
+
+    override fun signupVerifier(): String? = signup()?.optString("verifier")?.takeIf { it.isNotBlank() }
+    override fun signupEmail(): String? = signup()?.optString("email")?.takeIf { it.isNotBlank() }
+    private fun signup(): JSONObject? = securePrefs.getString("signup", null)?.let(::decrypt)?.let { runCatching { JSONObject(it) }.getOrNull() }
+    override fun writeSignup(verifier: String, email: String) {
+        val encrypted = encrypt(JSONObject().put("verifier", verifier).put("email", email).toString())
+        check(securePrefs.edit().putString("signup", encrypted).commit())
+    }
+    override fun clearSignup() { securePrefs.edit().remove("signup").commit() }
 
     override fun recoveryVerifier(): String? {
         val encrypted = securePrefs.getString(KEY_RECOVERY_VERIFIER, null) ?: return null

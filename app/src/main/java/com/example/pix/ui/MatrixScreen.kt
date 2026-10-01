@@ -1,6 +1,16 @@
 package com.example.pix.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.AnnotatedString
+import com.example.pix.ui.theme.LocalTextScale
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,7 +70,17 @@ fun MatrixScreen(
     fun cell(index: Int, modifier: Modifier) {
         Quadrant(index, groups[index].orEmpty(), config, modifier, open, complete, { add(index) })
     }
-    when (config.layout) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val availableWidth = maxWidth
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val headingStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp * LocalTextScale.current, lineHeight = 13.sp * LocalTextScale.current)
+    val requiredWidth = quadrantLabels.maxOf { label ->
+        with(density) { measurer.measure(AnnotatedString(stringResource(label)), headingStyle, softWrap = false).size.width.toDp() }
+    } + (if (config.cornerRadius > 20f) 26.dp else 14.dp)
+    val narrowest = (availableWidth - 24.dp) * minOf(config.columnSplit, 1 - config.columnSplit)
+    val layout = if (config.layout == 0 && narrowest < requiredWidth) 1 else config.layout
+    when (layout) {
         1 ->
             Column(
                 Modifier.fillMaxSize().padding(8.dp),
@@ -83,11 +103,7 @@ fun MatrixScreen(
                     cell(
                         it,
                         Modifier.width(
-                                (400f *
-                                        (if (it % 2 == 0) config.columnSplit
-                                        else 1 - config.columnSplit))
-                                    .coerceAtLeast(160f)
-                                    .dp
+                                ((availableWidth - 24.dp) * (if (it % 2 == 0) config.columnSplit else 1 - config.columnSplit)).coerceAtLeast(requiredWidth)
                             )
                             .fillMaxHeight(),
                     )
@@ -114,6 +130,7 @@ fun MatrixScreen(
                 }
             }
     }
+    }
 }
 
 @Composable
@@ -133,43 +150,32 @@ private fun Quadrant(
         shape = RoundedCornerShape(config.cornerRadius.dp),
     ) {
         Column {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 10.dp, top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(quadrantLabels[index]),
-                    Modifier.weight(1f),
-                    color = color,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                IconButton(
-                    onClick = add,
-                    modifier = Modifier.size(40.dp).testTag("quadrant-add-$index"),
-                ) {
-                    PixIcon(
-                        PixSymbol.PLUS,
-                        stringResource(R.string.add_task),
-                        modifier = Modifier.size(18.dp),
-                        tint = color,
-                    )
+            Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                val titlePadding = if (config.cornerRadius > 20f) 12.dp else 6.dp
+                val title = stringResource(quadrantLabels[index])
+                val titleStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 10.5f.sp * LocalTextScale.current, lineHeight = 13.sp * LocalTextScale.current)
+                BasicText(title,
+                    Modifier.fillMaxWidth().padding(start = titlePadding, end = titlePadding, top = 7.dp).testTag("quadrant-title-$index"),
+                    style = titleStyle.copy(color = color), maxLines = 1, softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 9.sp * LocalTextScale.current,
+                        maxFontSize = 10.5f.sp * LocalTextScale.current, stepSize = .1f.sp))
+                Text(stringResource(R.string.matrix_count, tasks.size),
+                    Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 6.dp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp * LocalTextScale.current, lineHeight = 11.sp * LocalTextScale.current),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.align(Alignment.BottomEnd).size(48.dp).clickable(onClick = add)
+                    .testTag("quadrant-add-$index"), contentAlignment = Alignment.BottomEnd) {
+                    PixIcon(PixSymbol.PLUS, stringResource(R.string.add_task),
+                        modifier = Modifier.padding(6.dp).size(16.dp), tint = color)
                 }
             }
-            Text(
-                stringResource(R.string.matrix_count, tasks.size),
-                Modifier.padding(horizontal = 10.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 8.dp)) {
+            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 4.dp)) {
                 if (tasks.isEmpty())
                     item {
                         Text(
                             stringResource(R.string.matrix_empty),
-                            Modifier.padding(12.dp),
-                            style = MaterialTheme.typography.bodySmall,
+                            Modifier.padding(6.dp),
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5f.sp * LocalTextScale.current),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -182,22 +188,23 @@ private fun Quadrant(
                             .testTag("matrix-task-${t.id}"),
                         verticalAlignment = Alignment.Top,
                     ) {
-                        Checkbox(
-                            t.isCompleted,
-                            { complete(t) },
-                            colors = CheckboxDefaults.colors(uncheckedColor = color),
-                            modifier =
-                                Modifier.size(40.dp).semantics {
-                                    contentDescription = completedLabel
-                                },
-                        )
+                        Box(Modifier.size(48.dp).toggleable(value = t.isCompleted, role = Role.Checkbox, onValueChange = { complete(t) })
+                            .semantics { contentDescription = completedLabel }, contentAlignment = Alignment.Center) {
+                            Canvas(Modifier.size(15.dp)) {
+                                drawRoundRect(color, cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = Stroke(1.5.dp.toPx()))
+                                if (t.isCompleted) {
+                                    drawLine(color, Offset(size.width * .2f, size.height * .5f), Offset(size.width * .43f, size.height * .73f), 1.8.dp.toPx())
+                                    drawLine(color, Offset(size.width * .43f, size.height * .73f), Offset(size.width * .82f, size.height * .25f), 1.8.dp.toPx())
+                                }
+                            }
+                        }
                         Column(Modifier.weight(1f).padding(top = 5.dp, end = 6.dp, bottom = 4.dp)) {
                             Text(
                                 t.title,
                                 style =
                                     MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 11.sp * com.example.pix.ui.theme.LocalTextScale.current,
-                                        lineHeight = 14.sp * com.example.pix.ui.theme.LocalTextScale.current,
+                                        fontSize = 10.5f.sp * com.example.pix.ui.theme.LocalTextScale.current,
+                                        lineHeight = 13.sp * com.example.pix.ui.theme.LocalTextScale.current,
                                     ),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -208,8 +215,8 @@ private fun Quadrant(
                                         .format(DateTimeFormatter.ofPattern("d MMM", locale)),
                                     style =
                                         MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 9.5f.sp * com.example.pix.ui.theme.LocalTextScale.current,
-                                            lineHeight = 12.sp * com.example.pix.ui.theme.LocalTextScale.current,
+                                            fontSize = 9.sp * com.example.pix.ui.theme.LocalTextScale.current,
+                                            lineHeight = 11.sp * com.example.pix.ui.theme.LocalTextScale.current,
                                         ),
                                     color = MaterialTheme.colorScheme.primary,
                                 )

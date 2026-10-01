@@ -256,7 +256,7 @@ class TaskWidgetDataSource(private val context: Context) {
     private fun TaskWithDetails.toWidgetTask(now: ZonedDateTime): WidgetTask =
         WidgetTask(
             id = task.id,
-            title = task.title,
+            title = (if(task.parentTaskId!=null) "↳ " else "") + task.title,
             dueLabel = task.dueDay?.let(::formatDueDate).orEmpty(),
             overdue = isOverdue(this, now),
             priority = task.priority,

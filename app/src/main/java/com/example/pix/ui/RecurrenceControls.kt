@@ -189,6 +189,7 @@ fun RecurrenceDialog(initial: String?, day: Long?, dismiss: () -> Unit, choose: 
 fun RecurrenceScopeDialog(
     delete: Boolean = false,
     allowOnly: Boolean = true,
+    keepsChildren: Boolean = false,
     dismiss: () -> Unit,
     choose: (RecurrenceScope) -> Unit,
 ) {
@@ -206,6 +207,7 @@ fun RecurrenceScopeDialog(
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (delete && keepsChildren) Text(stringResource(R.string.delete_parent_body))
                 TextButton(enabled = allowOnly, onClick = { choose(RecurrenceScope.ONLY_THIS) }) {
                     Text(stringResource(R.string.only_occurrence))
                 }

@@ -24,6 +24,7 @@ class SessionCoordinator internal constructor(
     private val auth: AuthSessionController,
     private val accounts: AccountDataStore,
     private val scope: CoroutineScope,
+    private val localTransition: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     private val started = AtomicBoolean(false)
     private val accountMutex = Mutex()
@@ -42,6 +43,7 @@ class SessionCoordinator internal constructor(
     private suspend fun handleAuthState(authState: AuthState) {
         when (authState) {
             AuthState.Loading -> _state.value = AccountSessionState.Restoring
+            is AuthState.AwaitingEmail -> _state.value = AccountSessionState.SignedOut
             AuthState.Unauthenticated -> _state.value = AccountSessionState.SignedOut
             is AuthState.Error -> _state.value = AccountSessionState.SignedOut
             is AuthState.PasswordRecovery ->
@@ -65,6 +67,7 @@ class SessionCoordinator internal constructor(
                 } ?: return
             _state.value = AccountSessionState.PreparingAccount(user)
             try {
+                localTransition {
                 val owner = accounts.owner()
                 when {
                     owner == userId -> publishReadyIfCurrent(user)
@@ -89,6 +92,7 @@ class SessionCoordinator internal constructor(
                         accounts.setOwner(userId)
                         publishReadyIfCurrent(user)
                     }
+                }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

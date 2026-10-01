@@ -49,5 +49,5 @@ open class CloudHttp(private val config: CloudConfig) {
     }
 
     open fun auth(path: String, body: JSONObject, accessToken: String? = null) =
-        request("POST", "/auth/v1$path", accessToken ?: config.anonKey, body.toString())
+        request("POST", "/auth/v1$path", accessToken, body.toString())
 }

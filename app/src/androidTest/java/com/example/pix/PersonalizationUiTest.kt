@@ -42,8 +42,8 @@ class PersonalizationUiTest {
         val title = "Note illustrate"
         val task = TaskEntity(title = title)
         val sub =
-            SubtaskEntity(
-                taskId = task.id,
+            TaskEntity(
+                parentTaskId = task.id,
                 title =
                     "Una sotto-attività lunga con tutti i dettagli da leggere per intero senza dover scorrere orizzontalmente il testo mentre si consulta la propria lista delle cose da fare",
             )
@@ -63,7 +63,7 @@ class PersonalizationUiTest {
         }
         runBlocking {
             repo.create(task)
-            repo.saveSubtask(sub)
+            repo.saveChildForTest(sub)
             repo.addImage(TaskImage(taskId = task.id, fileName = file.name))
         }
         rule.waitUntil(5000) { rule.onAllNodesWithText(title).fetchSemanticsNodes().isNotEmpty() }
@@ -75,9 +75,9 @@ class PersonalizationUiTest {
                 .isNotEmpty()
         }
         rule.onNodeWithContentDescription(label(R.string.task_image)).assertIsDisplayed()
-        rule.onNodeWithTag("subtask-${sub.id}").performScrollTo()
+        rule.onNodeWithTag("child-${sub.id}").performScrollTo()
         val layouts = mutableListOf<TextLayoutResult>()
-        rule.onNodeWithTag("subtask-${sub.id}").performSemanticsAction(
+        rule.onNode(hasText(sub.title) and hasAnyAncestor(hasTestTag("child-${sub.id}")), useUnmergedTree = true).performSemanticsAction(
             SemanticsActions.GetTextLayoutResult
         ) {
             it(layouts)

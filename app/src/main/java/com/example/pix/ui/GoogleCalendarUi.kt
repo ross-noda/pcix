@@ -1,6 +1,8 @@
 package com.example.pix.ui
 
 import android.app.Activity
+import android.accounts.AccountManager
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +30,9 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun GoogleEventRow(event: GoogleEventEntity, open: () -> Unit) {
@@ -54,12 +59,17 @@ fun GoogleEventRow(event: GoogleEventEntity, open: () -> Unit) {
 
 @Composable
 fun GoogleEventDetail(event: GoogleEventEntity, onClose: () -> Unit) {
+    val app = LocalContext.current.applicationContext as PixApplication
+    val calendars by app.google.calendars.collectAsState(initial = emptyList())
+    val calendar = calendars.firstOrNull { it.accountId == event.accountId && it.id == event.calendarId }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(event.title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(calendar?.summary ?: event.calendarId)
                 Text(eventTimeLabel(event))
+                if (event.allDay) Text(stringResource(R.string.google_all_day))
                 if (event.location.isNotBlank()) Text(event.location)
                 if (event.description.isNotBlank()) Text(event.description)
                 Text(stringResource(R.string.google_readonly))
@@ -73,9 +83,9 @@ fun GoogleEventDetail(event: GoogleEventEntity, onClose: () -> Unit) {
 
 fun eventTimeLabel(event: GoogleEventEntity): String {
     val start = LocalDate.ofEpochDay(event.startDay)
-    val end = LocalDate.ofEpochDay(event.endDay - 1)
+    val end = LocalDate.ofEpochDay(if (!event.allDay && event.endMinute == 0) event.endDay else event.endDay - 1)
     val dates =
-        if (event.startDay == event.endDay - 1 || event.endDay <= event.startDay + 1)
+        if (start == end)
             start.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
         else
             start.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)) +
@@ -92,46 +102,66 @@ fun GoogleCalendarSettings() {
     val app = context.applicationContext as PixApplication
     val calendars by app.google.calendars.collectAsState(initial = emptyList())
     val reconnect by app.google.needsReconnect.collectAsState()
-    val scope = rememberCoroutineScope()
-    var picker by remember { mutableStateOf(false) }
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
-            val data = it.data ?: return@rememberLauncherForActivityResult
-            val activity = context as? Activity ?: return@rememberLauncherForActivityResult
-            scope.launch { app.google.completeAuthorization(activity, data) }
+    val connection by app.google.connection.collectAsState()
+    var picker by rememberSaveable { mutableStateOf(false) }
+    var refreshing by remember { mutableStateOf(false) }
+    val busy = connection.busy || refreshing
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK || result.data == null) {
+            app.google.connectionCancelled(result.resultCode == Activity.RESULT_OK)
+        } else app.backgroundScope.launch { app.google.completeAuthorization(data = result.data!!) }
+    }
+    val accountPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val email = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+        if (result.resultCode != Activity.RESULT_OK || email.isNullOrBlank()) {
+            app.google.connectionCancelled(result.resultCode == Activity.RESULT_OK)
+        } else app.backgroundScope.launch { app.google.authorize(accountEmail = email) }
+    }
+    LaunchedEffect(connection.resolution) {
+        connection.resolution?.let { sender ->
+            try {
+                launcher.launch(IntentSenderRequest.Builder(sender).build())
+                app.google.resolutionLaunched()
+            } catch (error: Exception) { app.google.reportFailure(error, "launch-consent") }
         }
+    }
+    val errorLabel = when (connection.issue) {
+        GoogleCalendarRepository.Issue.Cancelled -> R.string.google_cancelled
+        GoogleCalendarRepository.Issue.Callback -> R.string.google_callback_error
+        GoogleCalendarRepository.Issue.Configuration -> R.string.google_configuration_error
+        GoogleCalendarRepository.Issue.Permission -> R.string.google_permission_error
+        GoogleCalendarRepository.Issue.Network -> R.string.google_network_error
+        GoogleCalendarRepository.Issue.Other -> R.string.google_sync_error
+        null -> null
+    }
     Surface(shape = MaterialTheme.shapes.large) {
         Column {
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (errorLabel != null) Text(stringResource(errorLabel), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
             ListItem(
                 headlineContent = { Text(stringResource(R.string.google_calendar)) },
                 supportingContent = {
                     Text(
                         when {
+                            connection.busy -> stringResource(R.string.google_connecting)
                             reconnect -> stringResource(R.string.google_reconnect)
-                            app.google.connected() ->
-                                app.google.email
+                            connection.email != null ->
+                                connection.email
                                     ?: stringResource(R.string.google_calendars_count, calendars.count { it.enabled })
                             else -> stringResource(R.string.google_not_connected)
                         }
                     )
                 },
                 modifier =
-                    Modifier.clickable {
-                        val activity = context as? Activity ?: return@clickable
-                        scope.launch {
-                            when (val outcome = app.google.authorize(activity)) {
-                                GoogleCalendarRepository.AuthOutcome.Ready -> {
-                                    GoogleCalendarWork.enqueue(app)
-                                    picker = true
-                                }
-                                is GoogleCalendarRepository.AuthOutcome.Resolution ->
-                                    launcher.launch(IntentSenderRequest.Builder(outcome.sender).build())
-                                GoogleCalendarRepository.AuthOutcome.Failed -> Unit
-                            }
-                        }
+                    Modifier.clickable(enabled = !busy) {
+                        app.google.beginSelection()
+                        try {
+                            accountPicker.launch(AccountManager.newChooseAccountIntent(
+                                null, null, arrayOf("com.google"), null, null, null, null))
+                        } catch (error: Exception) { app.google.reportFailure(error, "launch-account-picker") }
                     },
             )
-            if (app.google.connected()) {
+            if (connection.email != null) {
                 ListItem(
                     headlineContent = { Text(stringResource(R.string.google_choose)) },
                     modifier = Modifier.clickable { picker = true },
@@ -140,9 +170,14 @@ fun GoogleCalendarSettings() {
                     headlineContent = { Text(stringResource(R.string.google_refresh)) },
                     modifier =
                         Modifier.clickable {
-                            scope.launch {
-                                runCatching { app.google.synchronize(context as? Activity) }
-                                GoogleCalendarWork.enqueue(app)
+                            if (!busy) {
+                                refreshing = true
+                                app.backgroundScope.launch {
+                                    try { app.google.synchronize() }
+                                    catch (cancelled: CancellationException) { throw cancelled }
+                                    catch (error: Exception) { app.google.reportFailure(error, "manual-sync") }
+                                    finally { refreshing = false }
+                                }
                             }
                         },
                 )
@@ -150,7 +185,11 @@ fun GoogleCalendarSettings() {
                     headlineContent = { Text(stringResource(R.string.google_disconnect)) },
                     modifier =
                         Modifier.clickable {
-                            scope.launch { app.google.disconnect(context as? Activity) }
+                            if (!busy) app.backgroundScope.launch {
+                                try { app.google.disconnect(null) }
+                                catch (cancelled: CancellationException) { throw cancelled }
+                                catch (error: Exception) { app.google.reportFailure(error, "disconnect") }
+                            }
                         },
                 )
             }
@@ -161,7 +200,7 @@ fun GoogleCalendarSettings() {
             onDismissRequest = { picker = false },
             title = { Text(stringResource(R.string.google_choose)) },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     calendars.forEach { calendar -> CalendarToggle(calendar, app) }
                 }
             },

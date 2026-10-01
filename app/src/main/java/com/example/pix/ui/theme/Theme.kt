@@ -74,7 +74,7 @@ fun PixTheme(
 ) {
     val dark = mode == 2 || (mode == 0 && isSystemInDarkTheme())
     val chosen = Color(accent)
-    val onChosen = if (chosen.luminance() > .45f) Color.Black else Color.White
+    val onChosen = if (chosen.luminance() > .179f) Color.Black else Color.White
     val base = if (dark) Dark else Light
     val foreground = if (dark) lerp(chosen, Color.White, .25f) else lerp(chosen, Color.Black, .22f)
     val scale = listOf(.88f, 1f, 1.15f)[textSize.coerceIn(0, 2)]
@@ -85,7 +85,7 @@ fun PixTheme(
                     primary = foreground,
                     primaryContainer = chosen,
                     onPrimaryContainer = onChosen,
-                    onPrimary = onChosen,
+                    onPrimary = if (foreground.luminance() > .179f) Color.Black else Color.White,
                     secondaryContainer = lerp(base.background, chosen, .2f),
                     onSecondaryContainer = foreground,
                     inversePrimary = foreground,

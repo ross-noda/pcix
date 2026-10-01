@@ -3,6 +3,8 @@ package com.example.pix.data
 import com.example.pix.cloud.tracked
 import com.example.pix.domain.TaskRules
 import java.time.ZonedDateTime
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class TaskFilter(
     val mode: String = "TODAY",
@@ -17,6 +19,8 @@ class TaskRepository(
     private val db: PixDatabase,
     private val onTasksChanged: () -> Unit = {},
     private val onMutated: () -> Unit = {},
+    private val accountMutex: Mutex = Mutex(),
+    private val canMutate: () -> Boolean = { true },
 ) {
     private val dao = db.dao()
     private val recurrence = RecurrenceStore(dao)
@@ -24,7 +28,11 @@ class TaskRepository(
     val tags = dao.observeTags()
 
     private suspend fun <T> mutate(block: suspend () -> T): T {
-        val result = if (db.inTransaction()) block() else db.tracked { block() }
+        if (db.inTransaction()) return block()
+        val result = accountMutex.withLock {
+            check(canMutate()) { "Account is not ready for local mutations" }
+            db.tracked { block() }
+        }
         onTasksChanged()
         onMutated()
         return result
@@ -82,9 +90,9 @@ class TaskRepository(
             tags.forEach { dao.attachTag(TaskTagCrossRef(task.id, it)) }
         }
 
-    private fun validate(task: TaskEntity) {
+    private suspend fun validate(task: TaskEntity) {
+        TaskHierarchy.validate(dao, task)
         require(TaskRules.validTitle(task.title))
-        require(task.notes.length <= 2000)
         require(task.minuteOfDay == null || (task.dueDay != null && task.minuteOfDay in 0..1439))
         require(task.priority in listOf(0, 1, 3, 5))
         com.example.pix.domain.TaskTiming.validate(task)
@@ -118,6 +126,7 @@ class TaskRepository(
     suspend fun delete(id: String, scope: RecurrenceScope = RecurrenceScope.ONLY_THIS) {
         mutate {
             val task = dao.task(id) ?: return@mutate
+            dao.detachChildren(id, System.currentTimeMillis())
             if (task.seriesId == null) dao.deleteTask(id)
             else {
                 if (scope == RecurrenceScope.THIS_AND_FUTURE) recurrence.cut(task)
@@ -143,9 +152,6 @@ class TaskRepository(
             dao.insertTask(copy)
             dao.images(id).forEach { dao.insertImage(it.copy(id = newId(), taskId = copy.id)) }
             dao.tagIds(id).forEach { dao.attachTag(TaskTagCrossRef(copy.id, it)) }
-            dao.subtasks(id).forEach {
-                dao.saveSubtask(it.copy(id = newId(), taskId = copy.id, isCompleted = false))
-            }
             original.seriesId?.let { dao.series(it) }?.let { recurrence.start(copy, it.rule) }
         }
 
@@ -190,24 +196,6 @@ class TaskRepository(
             }
         }
 
-    suspend fun reorderSubtask(
-        id: String,
-        targetId: String,
-        taskId: String,
-        scope: RecurrenceScope,
-    ) =
-        mutate {
-            val rows = dao.subtasks(taskId)
-            val completed = rows.find { it.id == id }?.isCompleted ?: return@mutate
-            val ids = rows.filter { it.isCompleted == completed }.map { it.id }
-            if (id !in ids || targetId !in ids || id == targetId) return@mutate
-            val now = System.currentTimeMillis()
-            com.example.pix.domain.OrderRules.move(ids, id, targetId).forEachIndexed { index, key ->
-                dao.setSubtaskOrder(key, index.toLong(), now)
-            }
-            recurrence.refreshSubtaskTemplate(taskId, scope)
-        }
-
     suspend fun moveTask(id: String, listId: String, scope: RecurrenceScope) {
         mutate {
             val old = dao.task(id) ?: return@mutate
@@ -245,13 +233,13 @@ class TaskRepository(
     suspend fun addImage(image: TaskImage, scope: RecurrenceScope = RecurrenceScope.ONLY_THIS) =
         mutate {
             dao.insertImage(image)
-            recurrence.refreshSubtaskTemplate(image.taskId, scope)
+            recurrence.refreshTemplate(image.taskId, scope)
         }
 
     suspend fun removeImage(image: TaskImage, scope: RecurrenceScope = RecurrenceScope.ONLY_THIS) =
         mutate {
             dao.deleteImage(image.id)
-            recurrence.refreshSubtaskTemplate(image.taskId, scope)
+            recurrence.refreshTemplate(image.taskId, scope)
         }
 
     suspend fun saveList(list: ListEntity) {
@@ -298,59 +286,37 @@ class TaskRepository(
 
     suspend fun deleteTag(id: String) = mutate { dao.deleteTag(id) }
 
-    suspend fun saveSubtask(
-        subtask: SubtaskEntity,
-        scope: RecurrenceScope = RecurrenceScope.ONLY_THIS,
-    ) =
-        mutate {
-            require(TaskRules.validTitle(subtask.title))
-            val siblings = dao.subtasks(subtask.taskId)
-            val existing = siblings.find { it.id == subtask.id }
-            val order =
-                existing?.sortOrder
-                    ?: ((siblings.filterNot { it.isCompleted }.minOfOrNull { it.sortOrder } ?: 0L) -
-                        1)
-            dao.saveSubtask(
-                subtask.copy(
-                    title = subtask.title.trim(),
-                    sortOrder = order,
-                    updatedAt = System.currentTimeMillis(),
-                )
-            )
-            recurrence.refreshSubtaskTemplate(subtask.taskId, scope)
-        }
+    fun parentCandidates(id: String, search: String) = dao.parentCandidates(id, TaskRules.searchPattern(search).ifEmpty { "%" })
 
-    suspend fun deleteSubtask(
-        id: String,
-        taskId: String? = null,
-        scope: RecurrenceScope = RecurrenceScope.ONLY_THIS,
-    ) =
-        mutate {
-            dao.deleteSubtask(id)
-            if (taskId != null) recurrence.refreshSubtaskTemplate(taskId, scope)
-        }
+    suspend fun linkParent(id: String, parent: String?) = mutate {
+        val task = requireNotNull(dao.task(id))
+        require(!task.isTemplate && !task.isSkipped)
+        TaskHierarchy.validate(dao, task.copy(parentTaskId = parent))
+        dao.setParent(id, parent, System.currentTimeMillis())
+    }
 
-    suspend fun moveSubtask(
-        id: String,
-        taskId: String,
-        direction: Int,
-        scope: RecurrenceScope = RecurrenceScope.ONLY_THIS,
-    ) =
-        mutate {
-            val all = dao.subtasks(taskId)
-            val completed = all.find { it.id == id }?.isCompleted ?: return@mutate
-            val rows = all.filter { it.isCompleted == completed }.toMutableList()
-            val index = rows.indexOfFirst { it.id == id }
-            val target = index + direction
-            if (index >= 0 && target in rows.indices) {
-                java.util.Collections.swap(rows, index, target)
-                val now = System.currentTimeMillis()
-                rows.forEachIndexed { order, row ->
-                    dao.saveSubtask(
-                        row.copy(sortOrder = order.toLong(), updatedAt = now)
-                    )
-                }
-                recurrence.refreshSubtaskTemplate(taskId, scope)
-            }
-        }
+    suspend fun createChild(parentId: String, title: String): TaskEntity = mutate {
+        val parent = requireNotNull(dao.task(parentId))
+        val child = TaskEntity(title = title, parentTaskId = parentId, listId = parent.listId,
+            sortOrder = (dao.children(parentId).minOfOrNull { it.sortOrder } ?: 0L) - 1)
+        create(child)
+        child
+    }
+
+    suspend fun reorderChild(id: String, targetId: String, parentId: String) = mutate {
+        val rows = dao.children(parentId)
+        val completed = rows.find { it.id == id }?.isCompleted ?: return@mutate
+        val ids = rows.filter { it.isCompleted == completed }.map { it.id }
+        if (id !in ids || targetId !in ids) return@mutate
+        val now = System.currentTimeMillis()
+        com.example.pix.domain.OrderRules.move(ids, id, targetId).forEachIndexed { order, key -> dao.setTaskOrder(key, order.toLong(), now) }
+    }
+
+    suspend fun moveChild(id: String, parentId: String, direction: Int) = mutate {
+        val rows = dao.children(parentId)
+        val completed = rows.find { it.id == id }?.isCompleted ?: return@mutate
+        val ids = rows.filter { it.isCompleted == completed }.map { it.id }
+        val index = ids.indexOf(id)
+        if (index + direction in ids.indices) reorderChild(id, ids[index + direction], parentId)
+    }
 }

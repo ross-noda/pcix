@@ -83,7 +83,7 @@ class BackupRepositoryTest {
                 priority = 1,
             )
         repo.create(task, setOf(tag))
-        repo.saveSubtask(SubtaskEntity(taskId = task.id, title = "Valigia", isCompleted = true))
+        repo.saveChildForTest(TaskEntity(parentTaskId = task.id, title = "Valigia", isCompleted = true))
         val file = ImageStore(context).file(newId() + ".image")
         files.add(file)
         file.outputStream().use {
@@ -103,7 +103,7 @@ class BackupRepositoryTest {
         val extra = TaskEntity(title = "Da sostituire")
         repo.create(extra)
         val prepared = backups.prepare(bytes.inputStream())
-        assertEquals(2, prepared.tasks)
+        assertEquals(3, prepared.tasks)
         assertEquals(2, prepared.lists)
         assertEquals(1, prepared.tags)
         db.syncDao().clear()
@@ -123,7 +123,7 @@ class BackupRepositoryTest {
         assertTrue(result.task.isCompleted)
         assertEquals("✈️", result.list.icon)
         assertEquals(tag, result.tags.single().id)
-        assertTrue(result.subtasks.single().isCompleted)
+        assertTrue(result.visibleChildren.single().isCompleted)
         assertNotNull(result.series)
         val restored = ImageStore(context).file(result.images.single().fileName)
         files.add(restored)
@@ -132,7 +132,7 @@ class BackupRepositoryTest {
         assertEquals(123L, db.dao().receipt(task.id)!!.triggerAt)
         backups.restore(backups.prepare(bytes.inputStream()))
         db.dao().referencedImages().forEach { files.add(ImageStore(context).file(it)) }
-        assertEquals(2, backups.prepare(archive().inputStream()).use { it.tasks })
+        assertEquals(3, backups.prepare(archive().inputStream()).use { it.tasks })
     }
 
     @Test
