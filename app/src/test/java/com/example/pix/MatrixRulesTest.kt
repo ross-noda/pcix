@@ -10,6 +10,21 @@ class MatrixRulesTest {
     private val today = LocalDate.of(2026, 12, 31)
     private val config = MatrixConfig()
 
+    @Test fun highPriorityIsUrgentEvenWithoutDateOrWithFutureDeadline() {
+        for (day in listOf(null, today.plusDays(100).toEpochDay())) {
+            val task = TaskEntity(title = "High", priority = 5, dueDay = day)
+            assertEquals(0, MatrixRules.quadrant(task, today, config))
+            assertEquals(1, MatrixRules.quadrant(task.copy(matrixUrgent = false), today, config))
+            assertEquals(2, MatrixRules.quadrant(task.copy(matrixImportant = false), today, config))
+        }
+    }
+
+    @Test fun monthGridUsesOnlyRequiredWeeks() {
+        assertEquals(28, CalendarRules.days(java.time.YearMonth.of(2027, 2)).size)
+        assertEquals(35, CalendarRules.days(java.time.YearMonth.of(2026, 10)).size)
+        assertEquals(42, CalendarRules.days(java.time.YearMonth.of(2026, 11)).size)
+    }
+
     @Test
     fun fourQuadrantsUseIndependentDimensions() {
         for (urgent in listOf(false, true)) for (important in listOf(false, true)) {

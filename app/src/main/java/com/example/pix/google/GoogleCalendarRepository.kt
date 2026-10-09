@@ -17,8 +17,6 @@ import kotlinx.coroutines.sync.withLock
 import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import org.json.JSONObject
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -34,11 +32,10 @@ class GoogleCalendarRepository internal constructor(
     private val mutex = Mutex()
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val dao = db.googleDao()
-    private val _activeGoogleAccountId = MutableStateFlow(prefs.getString(KEY_ACCOUNT_ID, null))
-    val calendars =
-        _activeGoogleAccountId.flatMapLatest { accountId ->
-            if (accountId == null) flowOf(emptyList()) else dao.observeCalendars(accountId)
-        }
+    val accounts = dao.observeAccounts()
+    val calendars = dao.observeAllCalendars()
+    private val _reconnectAccounts = MutableStateFlow(prefs.getStringSet("reconnectAccounts", emptySet())!!.toSet())
+    val reconnectAccounts: StateFlow<Set<String>> = _reconnectAccounts
     private val _needsReconnect = MutableStateFlow(prefs.getBoolean(KEY_RECONNECT, false))
     val needsReconnect: StateFlow<Boolean> = _needsReconnect
 
@@ -102,14 +99,11 @@ class GoogleCalendarRepository internal constructor(
 
     fun connected() = prefs.getBoolean(KEY_CONNECTED, false)
 
-    fun events(start: Long, end: Long) =
-        _activeGoogleAccountId.flatMapLatest { accountId ->
-            if (accountId == null) flowOf(emptyList()) else dao.observeEvents(accountId, start, end)
-        }
+    fun events(start: Long, end: Long) = dao.observeAllEvents(start, end)
 
     suspend fun authorize(@Suppress("UNUSED_PARAMETER") activity: Activity? = null, accountEmail: String? = null): AuthOutcome = mutex.withLock {
         authorizationOutcome {
-            when (val result = authorization.authorize(accountEmail ?: activeAccount()?.email, interactive = true)) {
+            when (val result = authorization.authorize(accountEmail, interactive = true)) {
                 is GoogleAuthorizationResult.Authorized -> finishAuthorization(result.accessToken)
                 is GoogleAuthorizationResult.Resolution -> AuthOutcome.Resolution(result.sender)
                 GoogleAuthorizationResult.Unavailable -> AuthOutcome.Failed
@@ -149,44 +143,84 @@ class GoogleCalendarRepository internal constructor(
         }
     }
 
-    suspend fun setEnabled(id: String, enabled: Boolean) = mutex.withLock {
-        val account = activeAccount() ?: return@withLock
+    suspend fun setEnabled(id: String, enabled: Boolean, accountId: String? = null) = mutex.withLock {
+        val account = (if (accountId != null) dao.account(accountId) else activeAccount()) ?: return@withLock
         dao.setEnabled(account.id, id, enabled)
     }
 
-    suspend fun synchronize(@Suppress("UNUSED_PARAMETER") activity: Activity? = null): SyncOutcome = mutex.withLock {
-        if (!connected()) return@withLock SyncOutcome.NotConnected
-        val account = activeAccount() ?: return@withLock markReconnect()
-        try {
-            val token = when (val result = authorization.authorize(account.email, interactive = false)) {
-                is GoogleAuthorizationResult.Authorized -> result.accessToken
-                else -> return@withLock markReconnect()
-            }
-            refreshCalendarList(token, account)
-            for (calendar in dao.calendars(account.id).filter { it.enabled }) {
-                syncCalendar(token, account, calendar)
-            }
-            markReady(account)
-            SyncOutcome.Synced
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Exception) {
-            reportFailure(error, "sync")
-            if (connection.value.issue == Issue.Permission) markReconnect() else throw error
+    suspend fun setColor(id: String, color: Int?, accountId: String? = null) = mutex.withLock {
+        val account = (if (accountId != null) dao.account(accountId) else activeAccount()) ?: return@withLock
+        db.withTransaction {
+            val calendar = dao.calendars(account.id).firstOrNull { it.id == id } ?: return@withTransaction
+            dao.saveCalendar(calendar.copy(localColorArgb = color))
+            dao.updateEventColor(account.id, id, color ?: calendar.colorArgb)
         }
     }
 
+    suspend fun synchronize(@Suppress("UNUSED_PARAMETER") activity: Activity? = null): SyncOutcome = mutex.withLock {
+        // Do not replace the foreground chooser/consent state while awaiting its callback.
+        if (_connection.value.busy) return@withLock SyncOutcome.Synced
+        val connectedAccounts = dao.accounts()
+        if (connectedAccounts.isEmpty()) return@withLock if (connected()) markReconnect() else SyncOutcome.NotConnected
+        var reconnect = false
+        var failure: Exception? = null
+        for (account in connectedAccounts) {
+            try {
+                val grant = authorization.authorize(account.email, interactive = false)
+                if (grant !is GoogleAuthorizationResult.Authorized) {
+                    markReconnect(account.id)
+                    reconnect = true
+                    continue
+                }
+                refreshCalendarList(grant.accessToken, account)
+                for (calendar in dao.calendars(account.id).filter { it.enabled }) {
+                    try { syncCalendar(grant.accessToken, account, calendar) }
+                    catch (error: GoogleCalendarApi.HttpError) {
+                        when {
+                            error.code == 404 -> dao.deleteCalendar(account.id, calendar.id)
+                            error.code == 403 && error.reason == "forbidden" -> dao.setEnabled(account.id, calendar.id, false)
+                            else -> throw error
+                        }
+                    }
+                }
+                markReady(account)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                reportFailure(error, "sync")
+                if (connection.value.issue == Issue.Permission) {
+                    markReconnect(account.id)
+                    reconnect = true
+                } else failure = error
+            }
+        }
+        // A revoked/broken account must never prevent another account from refreshing.
+        failure?.let { reportFailure(it, "sync"); throw it }
+        if (reconnect) SyncOutcome.NeedsReconnect else SyncOutcome.Synced
+    }
+
+    suspend fun disconnectAccount(accountId: String) = mutex.withLock {
+        val account = dao.account(accountId) ?: return@withLock
+        try { authorization.revokeCalendarAccess(account.email) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { reportFailure(error, "revoke-local-disconnect") }
+        dao.deleteAccount(accountId)
+        updateReconnectAccounts(_reconnectAccounts.value - accountId)
+        val remaining = dao.accounts()
+        val last = remaining.firstOrNull()
+        prefs.edit().putBoolean(KEY_CONNECTED, last != null)
+            .putString(KEY_ACCOUNT_ID, last?.id).putString(KEY_ACCOUNT_EMAIL, last?.email).commit()
+        _connection.value = ConnectionState(email = last?.email)
+    }
+
     suspend fun disconnect(@Suppress("UNUSED_PARAMETER") activity: Activity?) = mutex.withLock {
-        val account = activeAccount()
-        // Disconnect is serialized with downloads; a late response cannot repopulate the cache.
-        if (account != null) {
+        for (account in dao.accounts()) {
             try { authorization.revokeCalendarAccess(account.email) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { reportFailure(error, "revoke-local-disconnect") }
         }
         db.withTransaction { dao.clearAccounts() }
         prefs.edit().clear().commit()
-        _activeGoogleAccountId.value = null
+        _reconnectAccounts.value = emptySet()
         _needsReconnect.value = false
         _connection.value = ConnectionState()
     }
@@ -204,20 +238,20 @@ class GoogleCalendarRepository internal constructor(
                 colorArgb = GoogleColors.argb(item.optString("backgroundColor").ifBlank { null }),
                 timeZone = item.optString("timeZone").takeIf { it.isNotBlank() },
                 enabled = existing[id]?.enabled ?: true,
-                accessRole = item.optString("accessRole").takeIf { it.isNotBlank() })
+                accessRole = item.optString("accessRole").takeIf { it.isNotBlank() },
+                localColorArgb = existing[id]?.localColorArgb)
         }
         val zone = ZoneId.systemDefault()
         val downloaded = calendars.filter { it.enabled }.map { calendar ->
             val result = api.events(token, calendar.id, null)
             val events = result.items.map { item ->
-                GoogleEventParser.parse(account.id, calendar.id, calendar.colorArgb, item, zone)
+                GoogleEventParser.parse(account.id, calendar.id, calendar.localColorArgb ?: calendar.colorArgb, item, zone)
                     ?: error("Invalid Google event")
             }
             Triple(calendar, result, events)
         }
         // A failed identity/list/event request leaves the previous offline account/cache intact.
         db.withTransaction {
-            if (activeAccount()?.id != account.id) dao.clearAccounts()
             dao.saveAccount(account)
             for (calendar in calendars) dao.saveCalendar(calendar)
             for (id in existing.keys - calendars.map { it.id }.toSet()) dao.deleteCalendar(account.id, id)
@@ -247,12 +281,18 @@ class GoogleCalendarRepository internal constructor(
             .putString(KEY_ACCOUNT_ID, account.id)
             .putString(KEY_ACCOUNT_EMAIL, account.email)
             .commit()
-        _activeGoogleAccountId.value = account.id
-        _needsReconnect.value = false
+        updateReconnectAccounts(_reconnectAccounts.value - account.id)
         _connection.value = ConnectionState(email = account.email)
     }
 
-    private fun markReconnect(): SyncOutcome {
+    private fun updateReconnectAccounts(ids: Set<String>) {
+        prefs.edit().putStringSet("reconnectAccounts", ids).putBoolean(KEY_RECONNECT, ids.isNotEmpty()).commit()
+        _reconnectAccounts.value = ids
+        _needsReconnect.value = ids.isNotEmpty()
+    }
+
+    private fun markReconnect(accountId: String? = null): SyncOutcome {
+        if (accountId != null) updateReconnectAccounts(_reconnectAccounts.value + accountId)
         prefs.edit().putBoolean(KEY_RECONNECT, true).apply()
         _needsReconnect.value = true
         _connection.value = _connection.value.copy(busy = false, issue = Issue.Permission)
@@ -277,9 +317,10 @@ class GoogleCalendarRepository internal constructor(
                     timeZone = item.optString("timeZone").takeIf { it.isNotBlank() },
                     enabled = previous?.enabled ?: true,
                     accessRole = item.optString("accessRole").takeIf { it.isNotBlank() },
+                    localColorArgb = previous?.localColorArgb,
                 )
                 dao.saveCalendar(calendar)
-                dao.updateEventColor(account.id, id, calendar.colorArgb)
+                dao.updateEventColor(account.id, id, calendar.localColorArgb ?: calendar.colorArgb)
             }
             for (id in existing.keys - retained) dao.deleteCalendar(account.id, id)
         }
@@ -292,7 +333,7 @@ class GoogleCalendarRepository internal constructor(
         val syncToken = if (prefs.getString(zoneKey, null) == zone.id) previousToken else null
         val result = api.events(token, calendar.id, syncToken)
         val events = result.items.map { item ->
-            GoogleEventParser.parse(account.id, calendar.id, calendar.colorArgb, item, zone)
+            GoogleEventParser.parse(account.id, calendar.id, calendar.localColorArgb ?: calendar.colorArgb, item, zone)
                 ?: error("Invalid Google event")
         }
         db.withTransaction {

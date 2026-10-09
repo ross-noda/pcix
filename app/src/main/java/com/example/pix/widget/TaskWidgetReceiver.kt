@@ -11,5 +11,6 @@ class TaskWidgetReceiver : GlanceAppWidgetReceiver() {
         super.onDeleted(context, appWidgetIds)
         val store = TaskWidgetConfigStore(context)
         appWidgetIds.forEach(store::delete)
+        appWidgetIds.forEach { WidgetBackgroundStore(context).delete(it) }
     }
 }

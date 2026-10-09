@@ -48,14 +48,9 @@ import androidx.glance.color.ColorProvider
 
 class TaskWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode =
-        SizeMode.Responsive(
-            setOf(
-                DpSize(180.dp, 120.dp),
-                DpSize(280.dp, 220.dp),
-                DpSize(360.dp, 360.dp),
-            )
-        )
+    override val sizeMode: SizeMode = SizeMode.Responsive(
+        setOf(DpSize(180.dp, 120.dp), DpSize(280.dp, 220.dp), DpSize(360.dp, 360.dp))
+    )
 
     override suspend fun provideGlance(
         context: Context,
@@ -100,8 +95,8 @@ private fun WidgetSurface(
             GlanceModifier
                 .fillMaxSize()
                 .background(
-                    palette.surface,
-                    palette.surface,
+                    widgetBackground(context, appWidgetId),
+                    widgetBackground(context, appWidgetId),
                 )
                 .cornerRadius(R.dimen.widget_corner_radius)
                 .appWidgetBackground()

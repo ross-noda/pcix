@@ -339,6 +339,7 @@ fun DataSyncSettings() {
         }
     Surface(shape = MaterialTheme.shapes.large) {
         Column {
+            Text(stringResource(R.string.sync_automatic), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
             Text(stringResource(R.string.sync_coverage), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
             ListItem(
                 headlineContent = { Text(stringResource(R.string.sync_now)) },

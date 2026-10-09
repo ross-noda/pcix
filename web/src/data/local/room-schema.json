@@ -1,0 +1,354 @@
+{
+  "habit_groups": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "name": {
+      "type": "string",
+      "nullable": false
+    },
+    "sort_order": {
+      "type": "number",
+      "nullable": false
+    },
+    "created_at": {
+      "type": "number",
+      "nullable": false
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    }
+  },
+  "habits": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "name": {
+      "type": "string",
+      "nullable": false
+    },
+    "icon": {
+      "type": "string",
+      "nullable": false
+    },
+    "color": {
+      "type": "number",
+      "nullable": false
+    },
+    "group_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "notes": {
+      "type": "string",
+      "nullable": false
+    },
+    "csv_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "unit": {
+      "type": "string",
+      "nullable": false
+    },
+    "active": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "sort_order": {
+      "type": "number",
+      "nullable": false
+    },
+    "reminder_minute": {
+      "type": "number",
+      "nullable": true
+    },
+    "created_at": {
+      "type": "number",
+      "nullable": false
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    }
+  },
+  "habit_rules": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "habit_id": {
+      "type": "string",
+      "nullable": false
+    },
+    "effective_day": {
+      "type": "number",
+      "nullable": false
+    },
+    "start_day": {
+      "type": "number",
+      "nullable": false
+    },
+    "end_day": {
+      "type": "number",
+      "nullable": true
+    },
+    "quantity": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "target": {
+      "type": "number",
+      "nullable": false
+    },
+    "step": {
+      "type": "number",
+      "nullable": false
+    },
+    "weekdays": {
+      "type": "number",
+      "nullable": false
+    },
+    "interval_days": {
+      "type": "number",
+      "nullable": false
+    },
+    "enabled": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    }
+  },
+  "habit_logs": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "habit_id": {
+      "type": "string",
+      "nullable": false
+    },
+    "day": {
+      "type": "number",
+      "nullable": false
+    },
+    "count": {
+      "type": "number",
+      "nullable": false
+    },
+    "skipped": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "created_at": {
+      "type": "number",
+      "nullable": false
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    },
+    "source_status": {
+      "type": "string",
+      "nullable": true
+    }
+  },
+  "tasks": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "title": {
+      "type": "string",
+      "nullable": false
+    },
+    "notes": {
+      "type": "string",
+      "nullable": false
+    },
+    "parent_task_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "list_id": {
+      "type": "string",
+      "nullable": false
+    },
+    "due_day": {
+      "type": "number",
+      "nullable": true
+    },
+    "minute_of_day": {
+      "type": "number",
+      "nullable": true
+    },
+    "duration_minutes": {
+      "type": "number",
+      "nullable": true
+    },
+    "priority": {
+      "type": "number",
+      "nullable": false
+    },
+    "matrix_urgent": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "matrix_important": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_completed": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "completed_at": {
+      "type": "number",
+      "nullable": true
+    },
+    "series_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "original_day": {
+      "type": "number",
+      "nullable": true
+    },
+    "is_template": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "is_skipped": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "sort_order": {
+      "type": "number",
+      "nullable": false
+    },
+    "created_at": {
+      "type": "number",
+      "nullable": false
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    }
+  },
+  "task_images": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "task_id": {
+      "type": "string",
+      "nullable": false
+    },
+    "file_name": {
+      "type": "string",
+      "nullable": false
+    },
+    "created_at": {
+      "type": "number",
+      "nullable": false
+    }
+  },
+  "lists": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "name": {
+      "type": "string",
+      "nullable": false
+    },
+    "icon": {
+      "type": "string",
+      "nullable": false
+    },
+    "color": {
+      "type": "number",
+      "nullable": false
+    },
+    "sort_order": {
+      "type": "number",
+      "nullable": false
+    },
+    "created_at": {
+      "type": "number",
+      "nullable": false
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    }
+  },
+  "tags": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "name": {
+      "type": "string",
+      "nullable": false
+    },
+    "normalized_name": {
+      "type": "string",
+      "nullable": false
+    },
+    "color": {
+      "type": "number",
+      "nullable": false
+    },
+    "created_at": {
+      "type": "number",
+      "nullable": false
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    }
+  },
+  "task_tags": {
+    "task_id": {
+      "type": "string",
+      "nullable": false
+    },
+    "tag_id": {
+      "type": "string",
+      "nullable": false
+    }
+  },
+  "recurring_series": {
+    "id": {
+      "type": "string",
+      "nullable": false
+    },
+    "rule": {
+      "type": "string",
+      "nullable": false
+    },
+    "anchor_day": {
+      "type": "number",
+      "nullable": false
+    },
+    "template_task_id": {
+      "type": "string",
+      "nullable": false
+    },
+    "end_before": {
+      "type": "number",
+      "nullable": true
+    },
+    "updated_at": {
+      "type": "number",
+      "nullable": false
+    }
+  }
+}

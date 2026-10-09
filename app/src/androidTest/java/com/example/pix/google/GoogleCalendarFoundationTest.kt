@@ -71,6 +71,44 @@ class GoogleCalendarFoundationTest {
         assertEquals("Second", dao.events(account.id, "calendar-b").single().title)
     }
 
+    @Test fun vanishedCalendarDoesNotBlockAnotherCalendar() = runBlocking {
+        val account = seedConnectedAccount()
+        val dao = db.googleDao()
+        dao.saveCalendar(GoogleCalendarEntity(account.id, "a", "A"))
+        dao.saveCalendar(GoogleCalendarEntity(account.id, "b", "B"))
+        server.enqueue(MockResponse().setBody("""{"items":[{"id":"a","summary":"A"},{"id":"b","summary":"B"}]}"""))
+        server.enqueue(MockResponse().setResponseCode(404))
+        server.enqueue(MockResponse().setBody("""{"items":[],"nextSyncToken":"b-token"}"""))
+        val repo = repository(FakeAuthorizationGateway(GoogleAuthorizationResult.Authorized("t")))
+        assertEquals(GoogleCalendarRepository.SyncOutcome.Synced, repo.synchronize())
+        assertEquals(listOf("b"), dao.calendars(account.id).map { it.id })
+        assertEquals("b-token", dao.syncState(account.id, "b")!!.syncToken)
+    }
+
+    @Test fun localColorsPersistAcrossRefreshAndDoNotWriteGoogle() = runBlocking {
+        val account = seedConnectedAccount()
+        val dao = db.googleDao()
+        dao.saveCalendar(GoogleCalendarEntity(account.id, "a", "A"))
+        dao.saveCalendar(GoogleCalendarEntity(account.id, "b", "B"))
+        dao.saveEvent(event(account.id, "a", "same", "A"))
+        dao.saveEvent(event(account.id, "b", "same", "B"))
+        val repo = repository(FakeAuthorizationGateway(GoogleAuthorizationResult.Authorized("t")))
+        repo.setColor("a", 123)
+        repo.setColor("b", 456)
+        assertEquals(0, server.requestCount)
+        server.enqueue(MockResponse().setBody("""{"items":[{"id":"a","backgroundColor":"#112233"},{"id":"b"}]}"""))
+        repeat(2) { server.enqueue(MockResponse().setBody("""{"items":[{"id":"same","start":{"date":"2026-09-10"},"end":{"date":"2026-09-11"}}],"nextSyncToken":"s"}""")) }
+        assertEquals(GoogleCalendarRepository.SyncOutcome.Synced, repo.synchronize())
+        assertEquals(123, dao.events(account.id, "a").single().colorArgb)
+        assertEquals(456, dao.events(account.id, "b").single().colorArgb)
+        repeat(3) { assertEquals("GET", server.takeRequest().method) }
+        val reopened = repository(FakeAuthorizationGateway())
+        assertEquals(123, reopened.calendars.first().single { it.id == "a" }.localColorArgb)
+        repo.setColor("a", null)
+        assertEquals(0xff112233.toInt(), dao.events(account.id, "a").single().colorArgb)
+        assertEquals(456, dao.events(account.id, "b").single().colorArgb)
+    }
+
     @Test
     fun disconnectRevokesCalendarAuthorizationClearsOnlyGoogleCacheAndLeavesPcixData() = runBlocking {
         val account = seedConnectedAccount()
@@ -231,6 +269,56 @@ class GoogleCalendarFoundationTest {
         assertEquals(GoogleCalendarRepository.Issue.Configuration, repo.connection.value.issue)
         assertFalse(repo.connected())
         assertFalse(repo.connection.value.busy)
+    }
+
+    @Test fun addingSecondAccountPreservesFirstAndScopesColorsVisibilityAndRemoval() = runBlocking {
+        val first = seedConnectedAccount()
+        val dao = db.googleDao()
+        dao.saveCalendar(GoogleCalendarEntity(first.id, "shared", "First"))
+        dao.saveEvent(event(first.id, "shared", "same", "First event"))
+        val auth = FakeAuthorizationGateway(GoogleAuthorizationResult.Authorized("token"))
+        val repo = repository(auth)
+        server.enqueue(MockResponse().setBody("""{"sub":"second","email":"second@example.com"}"""))
+        server.enqueue(MockResponse().setBody("""{"items":[{"id":"shared","summary":"Second"}]}"""))
+        server.enqueue(MockResponse().setBody("""{"items":[{"id":"same","summary":"Second event","start":{"date":"2026-10-02"},"end":{"date":"2026-10-03"}}],"nextSyncToken":"s"}"""))
+        assertEquals(GoogleCalendarRepository.AuthOutcome.Ready, repo.authorize(accountEmail = "second@example.com"))
+        assertEquals(2, repo.accounts.first().size)
+        assertEquals(2, repo.events(0, 99999).first().size)
+        repo.setColor("shared", 123, first.id)
+        repo.setColor("shared", 456, "second")
+        assertEquals(123, dao.events(first.id, "shared").single().colorArgb)
+        assertEquals(456, dao.events("second", "shared").single().colorArgb)
+        repo.setEnabled("shared", false, first.id)
+        assertEquals("second", repo.events(0, 99999).first().single().accountId)
+        repo.disconnectAccount(first.id)
+        assertEquals(listOf(first.email), auth.revokedEmails)
+        assertEquals("second", repo.accounts.first().single().id)
+        assertEquals("Second event", repo.events(0, 99999).first().single().title)
+        assertTrue(repo.connected())
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test fun expiredFirstAccountDoesNotPreventSecondAccountSync() = runBlocking {
+        val first = seedConnectedAccount()
+        db.googleDao().saveAccount(GoogleCalendarAccountEntity("second", "second@example.com"))
+        val emails = mutableListOf<String?>()
+        val auth = object : GoogleAuthorizationGateway {
+            override suspend fun authorize(accountEmail: String?, interactive: Boolean): GoogleAuthorizationResult {
+                assertFalse(interactive)
+                emails += accountEmail
+                return if (accountEmail == first.email) GoogleAuthorizationResult.Unavailable else GoogleAuthorizationResult.Authorized("token")
+            }
+            override fun complete(data: android.content.Intent): GoogleAuthorizationResult.Authorized? = null
+            override suspend fun revokeCalendarAccess(accountEmail: String) {}
+        }
+        server.enqueue(MockResponse().setBody("""{"items":[{"id":"c"}]}"""))
+        server.enqueue(MockResponse().setBody("""{"items":[],"nextSyncToken":"second-token"}"""))
+        val repo = repository(auth)
+        assertEquals(GoogleCalendarRepository.SyncOutcome.NeedsReconnect, repo.synchronize())
+        assertEquals(listOf(first.email, "second@example.com"), emails)
+        assertEquals(setOf(first.id), repo.reconnectAccounts.value)
+        assertTrue(repo.needsReconnect.value)
+        assertEquals("second-token", db.googleDao().syncState("second", "c")!!.syncToken)
     }
 
     private suspend fun seedConnectedAccount(reconnect: Boolean = false): GoogleCalendarAccountEntity {

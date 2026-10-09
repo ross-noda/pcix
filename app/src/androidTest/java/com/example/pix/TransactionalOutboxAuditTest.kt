@@ -275,7 +275,7 @@ class TransactionalOutboxAuditTest {
     }
 
     @Test
-    fun duplicationAndImageMetadataAreQueued() = runBlocking {
+    fun duplicationIsQueuedButImagesRemainLocal() = runBlocking {
         val task = TaskEntity(title = "Original")
         val tag = repo.saveTag("T", 1)
         repo.create(task, setOf(tag))
@@ -293,17 +293,19 @@ class TransactionalOutboxAuditTest {
         assertTrue(copy.visibleChildren.isEmpty())
         assertEquals(task.id, repo.details(subtask.id)!!.task.parentTaskId)
         assertEquals(1, copy.images.size)
-        assertTrue(pending("task_images", copy.images.single().id).isNotEmpty())
+        assertTrue(pending("task_images", copy.images.single().id).isEmpty())
         assertTrue(pending("task_tags", OutboxRecorder.linkId(copy.task.id, tag)).isNotEmpty())
 
         db.syncDao().clear()
         val extra = TaskImage(taskId = task.id, fileName = "new.image")
         repo.addImage(extra)
-        assertEquals("new.image", assertUpsert("task_images", extra.id).getString("file_name"))
+        assertEquals("new.image", db.dao().imageById(extra.id)!!.fileName)
+        assertTrue(pending("task_images", extra.id).isEmpty())
 
         db.syncDao().clear()
         repo.removeImage(extra)
-        assertDelete("task_images", extra.id)
+        assertTrue(pending("task_images", extra.id).isEmpty())
+        assertNull(db.dao().imageById(extra.id))
     }
 
     @Test

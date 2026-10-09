@@ -22,6 +22,7 @@ class BackupRepository(private val context: Context, private val database: PixDa
     companion object {
         val tables =
             listOf(
+                "habit_groups", "habits", "habit_rules", "habit_logs",
                 "lists",
                 "tasks",
                 "tags",
@@ -55,8 +56,8 @@ class BackupRepository(private val context: Context, private val database: PixDa
                     val sql = database.openHelper.writableDatabase
                     JSONObject()
                         .put("format", "pcix-backup")
-                        .put("version", 2)
-                        .put("schema", 9)
+                        .put("version", 4)
+                        .put("schema", 12)
                         .put(
                             "tables",
                             JSONObject().apply {
@@ -159,9 +160,14 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 require(
                     data.getString("format") == "pcix-backup" &&
                         ((data.getInt("version") == 1 && data.getInt("schema") in 5..8) ||
-                         (data.getInt("version") == 2 && data.getInt("schema") == 9))
+                         (data.getInt("version") == 2 && data.getInt("schema") == 9) ||
+                         (data.getInt("version") == 3 && data.getInt("schema") == 11) ||
+                         (data.getInt("version") == 4 && data.getInt("schema") == 12))
                 )
                 val all = data.getJSONObject("tables")
+                if (data.getInt("version") < 3) {
+                    listOf("habit_groups", "habits", "habit_rules", "habit_logs").forEach { require(!all.has(it)); all.put(it, JSONArray()) }
+                }
                 if (data.getInt("version") == 1) convertLegacy(all, data)
                 require(all.keys().asSequence().toSet() == tables.toSet())
                 require(tables.sumOf { all.getJSONArray(it).length() } <= 100000)
@@ -263,6 +269,7 @@ class BackupRepository(private val context: Context, private val database: PixDa
                     statement.clearBindings()
                     columns.entries.forEachIndexed { index, (column, type) ->
                         val v = if (row.has(column)) row.get(column)
+                            else if (table == "habits" && column == "unit") "rep"
                             else if (column in setOf("createdAt", "updatedAt") && type == "INTEGER") 0L
                             else JSONObject.NULL
                         when {
@@ -294,6 +301,12 @@ class BackupRepository(private val context: Context, private val database: PixDa
                 "SELECT id FROM tasks WHERE isCompleted NOT IN (0,1) OR isTemplate NOT IN (0,1) OR isSkipped NOT IN (0,1) OR matrixUrgent NOT IN (0,1) OR matrixImportant NOT IN (0,1)"
             )
             .use { require(!it.moveToFirst()) }
+        db.habitDao().rules().forEach { com.example.pix.domain.HabitRules.validate(it) }
+        db.habitDao().habits().forEach { require(it.name.isNotBlank() && it.color in 0..11 && (it.reminderMinute == null || it.reminderMinute in 0..1439)) }
+        db.habitDao().habits().forEach { require(it.unit.isNotBlank() && it.unit.length <= 40 && (it.csvId == null || it.csvId.length in 1..256)) }
+        db.habitDao().logs().forEach { require(it.sourceStatus == null || it.sourceStatus in HabitCsv.statuses) }
+        db.habitDao().groups().forEach { require(it.name.isNotBlank()) }
+        db.habitDao().logs().forEach { require(it.count in 0..1000000 && it.day in -719162L..2932896L) }
         TaskHierarchy.validateGraph(sql)
         for (table in listOf("lists", "tags")) sql.query(
                 "SELECT id FROM $table WHERE color NOT BETWEEN 0 AND 11"

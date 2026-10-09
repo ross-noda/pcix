@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PixApp(model: TasksViewModel) {
+fun PixApp(model: TasksViewModel, habitModel: HabitsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
@@ -48,6 +48,7 @@ fun PixApp(model: TasksViewModel) {
     val draft by model.draft.collectAsStateWithLifecycle()
     var quick by rememberSaveable { mutableStateOf(false) }
     var matrixOptions by remember { mutableStateOf(false) }
+    var matrixCardEditor by remember { mutableStateOf(false) }
     var quickQuadrant by remember { mutableStateOf<Int?>(null) }
     var quickMinute by remember { mutableStateOf<Int?>(null) }
     val matrixConfig by model.matrixConfig.collectAsStateWithLifecycle()
@@ -57,17 +58,34 @@ fun PixApp(model: TasksViewModel) {
     val completed = stringResource(R.string.completed)
     val undo = stringResource(R.string.undo)
     LaunchedEffect(model, error) { model.errors.collect { snackbar.showSnackbar(error) } }
-    fun navigate(destination: String) {
+    LaunchedEffect(habitModel, error) { for (event in habitModel.errors) snackbar.showSnackbar(error) }
+    fun navigate(destination: String, nextFilter: TaskFilter? = null) {
+        if (route == destination && (nextFilter == null || nextFilter == model.filter.value)) return
+        nav.currentBackStackEntry?.savedStateHandle?.set("screenState", android.os.Bundle().apply {
+            val current = model.filter.value
+            putString("mode", current.mode); putString("list", current.listId); putString("tag", current.tagId)
+            putBoolean("completed", current.showCompleted); putBoolean("manual", current.manual)
+            putString("query", model.search.value); putLong("day", model.calendarDate.value)
+        })
         model.search.value = ""
-        nav.navigate(destination) {
-            popUpTo(nav.graph.startDestinationId) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
+        nextFilter?.let { model.filter.value = it }
+        nav.navigate(destination) { launchSingleTop = nextFilter == null }
+    }
+    LaunchedEffect(entry?.id) {
+        entry?.savedStateHandle?.get<android.os.Bundle>("screenState")?.let { state ->
+            model.filter.value = TaskFilter(mode = state.getString("mode") ?: "ALL",
+                listId = state.getString("list"), tagId = state.getString("tag"),
+                showCompleted = state.getBoolean("completed"), manual = state.getBoolean("manual"))
+            model.search.value = state.getString("query").orEmpty()
+            if (state.containsKey("day")) model.selectDate(state.getLong("day"))
         }
     }
+    val widgetDestination by model.widgetDestination.collectAsStateWithLifecycle()
+    LaunchedEffect(widgetDestination) {
+        widgetDestination?.let { navigate(it); model.widgetDestination.value = null }
+    }
     fun choose(value: TaskFilter) {
-        model.filter.value = value.copy(showCompleted = true)
-        navigate("home")
+        navigate("home", value.copy(showCompleted = true))
         scope.launch { drawer.close() }
     }
     fun toggle(task: TaskEntity) {
@@ -103,6 +121,12 @@ fun PixApp(model: TasksViewModel) {
             ?: stringResource(modes.find { it.first == filter.mode }?.second ?: R.string.all)
     val title =
         when (route) {
+            "habits" -> stringResource(R.string.h_habits)
+            "habit/new", "habit/edit/{id}" -> stringResource(R.string.h_edit)
+            "habit/{id}" -> stringResource(R.string.h_habits)
+            "habit-order" -> stringResource(R.string.h_reorder)
+            "habit-csv" -> stringResource(R.string.h_csv_title)
+            "habit-groups" -> stringResource(R.string.h_manage_groups)
             "home" -> homeTitle
             "calendar" -> stringResource(R.string.calendar)
             "organize" -> stringResource(R.string.organize)
@@ -268,25 +292,22 @@ fun PixApp(model: TasksViewModel) {
                                 containerColor = MaterialTheme.colorScheme.background
                             ),
                         navigationIcon = {
-                            if (route != "settings")
-                                IconButton(
-                                    onClick = {
-                                        if (route == "search") {
-                                            model.search.value = ""
-                                            nav.popBackStack()
-                                        } else scope.launch { drawer.open() }
-                                    }
-                                ) {
-                                    PixIcon(
-                                        if (route == "search") PixSymbol.BACK else PixSymbol.MENU,
-                                        stringResource(
-                                            if (route == "search") R.string.back
-                                            else R.string.pix_navigation_menu
-                                        ),
-                                    )
-                                }
+                            IconButton(onClick = { if (route.startsWith("habit/") || route == "habit-groups" || route == "habit-csv" || route == "habit-order" || route == "organize") nav.popBackStack() else scope.launch { drawer.open() } }, modifier = Modifier.testTag("app-menu")) {
+                                PixIcon(if (route.startsWith("habit/") || route == "habit-groups" || route == "habit-csv" || route == "habit-order" || route == "organize") PixSymbol.BACK else PixSymbol.MENU, stringResource(R.string.pix_navigation_menu))
+                            }
                         },
                         actions = {
+                            if (route == "habits") Box {
+                                IconButton(onClick = { menu = true }) {
+                                    PixIcon(PixSymbol.MORE, stringResource(R.string.more_actions))
+                                }
+                                DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.h_reorder)) },
+                                        onClick = { menu = false; navigate("habit-order") })
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.h_csv_menu)) },
+                                        onClick = { menu = false; navigate("habit-csv") })
+                                }
+                            }
                             if (route == "matrix")
                                 IconButton(onClick = { matrixOptions = true }) {
                                     PixIcon(PixSymbol.MORE, stringResource(R.string.matrix_options))
@@ -354,7 +375,7 @@ fun PixApp(model: TasksViewModel) {
                                     Triple("home", R.string.tasks, PixSymbol.TASKS),
                                     Triple("calendar", R.string.calendar, PixSymbol.CALENDAR),
                                     Triple("matrix", R.string.matrix, PixSymbol.LISTS),
-                                    Triple("organize", R.string.organize, PixSymbol.INBOX),
+                                    Triple("habits", R.string.h_habits, PixSymbol.REPEAT),
                                     Triple("settings", R.string.settings, PixSymbol.SETTINGS),
                                 )
                                 .forEach { (destination, label, icon) ->
@@ -381,7 +402,7 @@ fun PixApp(model: TasksViewModel) {
                         }
                 },
                 floatingActionButton = {
-                    if (route == "home" || route == "calendar")
+                    if (route == "home" || route == "calendar" || route == "matrix")
                         FloatingActionButton(
                             onClick = {
                                 quickQuadrant = null
@@ -518,6 +539,7 @@ fun PixApp(model: TasksViewModel) {
                                 quick = true
                             },
                             model::retry,
+                            model::setMatrixConfig,
                         )
                     }
 
@@ -548,7 +570,14 @@ fun PixApp(model: TasksViewModel) {
                             TaskList(content, "SEARCH", model::retry, model::open, ::toggle)
                         }
                     }
-                    composable("settings") { SettingsScreen(model) }
+                    composable("habits") { HabitsScreen(habitModel, { navigate("habit/new") }, { navigate("habit/$it") }, { navigate("habit-groups") }) }
+                    composable("habit/new") { HabitEditor(habitModel, null) { nav.popBackStack() } }
+                    composable("habit/edit/{id}") { e -> HabitEditor(habitModel, e.arguments?.getString("id")) { nav.popBackStack() } }
+                    composable("habit/{id}") { e -> val id = requireNotNull(e.arguments?.getString("id")); HabitDetail(habitModel, id, { navigate("habit/edit/$id") }, { nav.popBackStack() }) }
+                    composable("habit-order") { HabitOrderScreen(habitModel) }
+                    composable("habit-csv") { HabitCsvScreen(habitModel) }
+                    composable("habit-groups") { HabitGroupsScreen(habitModel) }
+                    composable("settings") { SettingsScreen(model) { navigate("organize") } }
                 }
             }
         }
@@ -570,7 +599,9 @@ fun PixApp(model: TasksViewModel) {
         ) {
             quick = false
         }
-    if (matrixOptions) MatrixOptions(matrixConfig, model::setMatrixConfig) { matrixOptions = false }
+    if (matrixOptions) MatrixOptions(matrixConfig, model::setMatrixConfig,
+        dismiss = { matrixOptions = false }, editCards = { matrixOptions = false; matrixCardEditor = true })
+    if (matrixCardEditor) MatrixCardEditor(matrixConfig, lists, tags, model::setMatrixConfig) { matrixCardEditor = false }
     draft?.let { TaskEditor(model, it, lists, tags) }
 }
 
@@ -698,7 +729,7 @@ fun TaskList(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(model: TasksViewModel) {
+private fun SettingsScreen(model: TasksViewModel, organize: () -> Unit) {
     val theme by model.theme.collectAsStateWithLifecycle()
     var appearance by remember { mutableStateOf(false) }
     var reminders by remember { mutableStateOf(false) }
@@ -737,6 +768,7 @@ private fun SettingsScreen(model: TasksViewModel) {
                 }
             }
         }
+        Surface(shape = MaterialTheme.shapes.large) { SettingsRow(PixSymbol.LISTS, stringResource(R.string.organize), stringResource(R.string.h_lists_tags), organize) }
         PersonalizationSettings(model)
         BackupSettings(model)
         AccountSettings(model)

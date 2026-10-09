@@ -142,6 +142,9 @@ class SyncEngine(
         // final states before deletes; for deletes, detach/delete children before their parents.
         val pending = db.syncDao().pending().sortedWith(outboxOrder)
         for (row in pending) {
+            if (row.entityType == "task_images") {
+                continue
+            }
             try {
                 val ack = remote.push(token, row)
                 validateAck(row, ack)
@@ -189,6 +192,9 @@ class SyncEngine(
             {
                 if (it.operation == OutboxRecorder.UPSERT) {
                     when (it.entityType) {
+                        "habit_groups" -> 0
+                        "habits" -> 1
+                        "habit_rules", "habit_logs" -> 2
                         "lists" -> 0
                         "tags" -> 1
                         "tasks" -> 2
@@ -202,6 +208,9 @@ class SyncEngine(
                         "task_tags", "task_images", "subtasks", "recurring_series" -> 0
                         "tasks" -> 1
                         "tags" -> 2
+                        "habit_rules", "habit_logs" -> 0
+                        "habits" -> 1
+                        "habit_groups" -> 2
                         "lists" -> 3
                         else -> 99
                     }
@@ -277,7 +286,7 @@ class SyncEngine(
         var touchedReminders = false
         db.withTransaction {
             rows.forEach { change ->
-                if (applyChange(accountId, change) && change.entityType == "tasks") {
+                if (applyChange(accountId, change) && (change.entityType == "tasks" || change.entityType.startsWith("habit"))) {
                     touchedReminders = true
                 }
             }
@@ -288,7 +297,7 @@ class SyncEngine(
     /** Returns true when the local canonical row actually changed. */
     private suspend fun applyChange(accountId: String, change: RemoteChange): Boolean {
         // Migration 0005 publishes canonical tasks for archived legacy subtasks.
-        if (change.entityType == "subtasks") return false
+        if (change.entityType == "subtasks" || change.entityType == "task_images") return false
         RemoteDataSource.validateEntity(change.entityType)
         val localId = localIdentity(change)
         val appliedVersion =
@@ -357,6 +366,10 @@ class SyncEngine(
 
     private suspend fun deleteLocal(table: String, localId: String) {
         when (table) {
+            "habit_groups" -> db.habitDao().deleteGroup(localId)
+            "habits" -> db.habitDao().deleteHabit(localId)
+            "habit_rules" -> db.habitDao().deleteRule(localId)
+            "habit_logs" -> db.habitDao().deleteLog(localId)
             "lists" -> {
                 if (localId != INBOX_ID) {
                     db.dao().moveToInbox(localId)
@@ -380,6 +393,10 @@ class SyncEngine(
 
     private suspend fun upsertLocal(table: String, row: JSONObject) {
         when (table) {
+            "habit_groups" -> db.habitDao().save(HabitCodec.parseHabitGroup(row))
+            "habits" -> db.habitDao().save(HabitCodec.parseHabit(row))
+            "habit_rules" -> db.habitDao().save(HabitCodec.parseHabitRule(row))
+            "habit_logs" -> db.habitDao().save(HabitCodec.parseHabitLog(row))
             "lists" -> db.dao().replaceList(SyncCodec.parseList(row))
             "tags" -> db.dao().replaceTag(SyncCodec.parseTag(row))
             "tasks" -> db.dao().replaceTask(SyncCodec.parseTask(row))
@@ -393,5 +410,5 @@ class SyncEngine(
 
     suspend fun <T> withSyncPaused(block: suspend () -> T): T = mutex.withLock { block() }
 
-    suspend fun pendingCount() = db.syncDao().pending().size
+    suspend fun pendingCount() = db.syncDao().pending().count { it.entityType != "task_images" }
 }

@@ -40,6 +40,7 @@ class CalendarWeekWidgetReceiver : AppWidgetProvider() {
         val store = CalendarWidgetConfigStore(context)
         appWidgetIds.forEach { appWidgetId ->
             store.delete(appWidgetId)
+            WidgetBackgroundStore(context).delete(appWidgetId)
             CalendarWidgetDataSource.invalidate(appWidgetId)
         }
     }

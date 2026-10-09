@@ -11,6 +11,7 @@ class ReconcileWorker(context: Context, params: WorkerParameters) :
     override suspend fun doWork(): Result =
         try {
             (applicationContext as PixApplication).reminders.reconcile()
+            (applicationContext as PixApplication).habitReminders.reconcile()
             Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled

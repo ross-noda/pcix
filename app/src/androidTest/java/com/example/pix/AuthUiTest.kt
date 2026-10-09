@@ -64,21 +64,20 @@ class AuthUiTest {
         rule.onNodeWithText(label(R.string.confirm_password)).assertExists()
     }
 
-    @Test fun markdownAlwaysEditableAndChecklistEditOnlySource() {
-        var source by mutableStateOf("## Heading\n- [ ] One\n- [ ] Two")
-        rule.setContent {PixTheme(mode=1) {MarkdownDescription("sample",source,{source=it})}}
-        rule.waitForIdle()
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("screencap -p /sdcard/Download/pix-markdown-live.png")
-            .use { java.io.FileInputStream(it.fileDescriptor).use { stream -> stream.readBytes() } }
-        val offset=source.indexOf("[ ]")+1
-        rule.onNodeWithTag("markdown-toggle-$offset").performClick()
-        rule.runOnIdle {assertEquals("## Heading\n- [x] One\n- [ ] Two",source)}
-        rule.onNodeWithTag("markdown-mode").assertDoesNotExist()
-        rule.onNodeWithTag("detail-notes").assertTextContains(source)
-        rule.onNodeWithTag("detail-notes").performTextClearance()
-        rule.onNodeWithTag("markdown-checklist").performClick()
-        rule.onNodeWithTag("detail-notes").performTextInput("New item")
-        rule.runOnIdle {assertEquals("- [ ] New item",source)}
+    @Test fun descriptionIsAlwaysEditableAndChecklistKeepsCompletedRowsEditable() {
+        var source by mutableStateOf("First\nSecond")
+        rule.setContent { PixTheme(mode=1) { MarkdownDescription("sample", source, { source=it }) } }
+        rule.onNodeWithTag("detail-notes").performTextReplacement("One\nTwo")
+        rule.onNodeWithTag("description-mode").performClick()
+        rule.onNodeWithTag("description-check-0").performClick().assertIsOn()
+        rule.onNodeWithTag("description-item-0").performTextReplacement("Edited done")
+        rule.runOnIdle { assertEquals("- [x] Edited done\n- [ ] Two",source) }
+        rule.onNodeWithTag("description-add").performClick()
+        rule.onNodeWithTag("description-item-2").performTextInput("Three")
+        rule.onNodeWithTag("description-delete-1").performClick()
+        rule.onNodeWithTag("description-mode").performClick()
+        rule.onNodeWithTag("detail-notes").assertTextContains("Edited done\nThree")
+        rule.onNodeWithTag("detail-notes").performTextReplacement("Still editable")
+        rule.runOnIdle { assertEquals("Still editable",source) }
     }
 }

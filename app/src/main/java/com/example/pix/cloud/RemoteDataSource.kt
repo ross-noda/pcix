@@ -142,7 +142,7 @@ class RemoteDataSource(private val config: CloudConfig, private val http: CloudH
 
     companion object {
         private val supported =
-            setOf("lists", "tags", "tasks", "recurring_series", "subtasks", "task_tags", "task_images")
+            setOf("habit_groups", "habits", "habit_rules", "habit_logs", "lists", "tags", "tasks", "recurring_series", "subtasks", "task_tags", "task_images")
 
         fun validateEntity(type: String) {
             if (type !in supported) throw ProtocolError("unsupported entity $type")

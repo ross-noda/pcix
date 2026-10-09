@@ -18,6 +18,8 @@ The expected order is:
 0003_backend_hardening.sql
 0004_explicit_tag_reattach.sql
 0005_task_hierarchy.sql
+0006_habits.sql
+0007_habit_csv.sql
 ```
 
 ## 2. Schema/security assertions
@@ -89,3 +91,12 @@ I tre script SQL sono passati su PostgreSQL 18.6 locale con auth.uid/auth.users 
 ## 5. Task hierarchy (migration 0005)
 
 Run `backend_hierarchy.sql` with the same disposable `user_a` variable. It checks independent completion, one-level canonicalization, preserved children after parent deletion, retry ACKs and stale parent references. The transaction rolls back. Update all clients before enabling child tasks; legacy subtask writes are rejected.
+
+
+## Abitudini (migration 0006)
+
+Dopo 0006, eseguire `backend_habits.sql` con `user_a` e `user_b` come nelle suite precedenti. Verifica RLS delle nuove tabelle, DML diretto negato, retry idempotente, SET NULL logico del gruppo, tombstone/cascade e feed. Passato su PostgreSQL 18.6 locale il 3 ottobre 2026; non equivale al deploy Supabase. I client precedenti devono essere aggiornati prima di pubblicare nuove entità nel feed. I conteggi giornalieri adottano LWW, non fusione additiva dei delta offline.
+
+## CSV abitudini (0007)
+
+`backend_habit_csv.sql` verifica identità/unità originali, stato Failed con quantità positiva, stato vuoto distinto da null, retry e feed. PASS su PostgreSQL locale 18.6; deploy Supabase non effettuato.

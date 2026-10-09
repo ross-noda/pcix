@@ -18,6 +18,7 @@ class PixApplication : Application() {
     val database by lazy { PixDatabase.create(this) }
     val scheduler by lazy { ReminderScheduler(this) }
     val reminders by lazy { ReminderEngine(database, scheduler) }
+    val habitReminders by lazy { HabitReminders(this, database, scheduler) }
     val cloud by lazy { CloudConfig.fromBuild() }
     val http by lazy { CloudHttp(cloud) }
     val auth by lazy { AuthRepository(this, cloud, http) }
@@ -52,11 +53,17 @@ class PixApplication : Application() {
     }
     val google by lazy { GoogleCalendarRepository(this, database, http, cloud) }
     val widgetUpdater by lazy { TaskWidgetUpdater(this, database, backgroundScope) }
+    val habits by lazy {
+        com.example.pix.data.HabitRepository(database, {
+            ReminderWork.reconcile(this)
+            if (cloud.configured) CloudSyncWork.enqueueChanges(this)
+        }, accountMutationMutex, { !cloud.configured || session.state.value is AccountSessionState.Ready })
+    }
     val repository by lazy {
         TaskRepository(
             database,
             { ReminderWork.reconcile(this) },
-            { if (cloud.configured) CloudSyncWork.enqueue(this) },
+            { if (cloud.configured) CloudSyncWork.enqueueChanges(this) },
             accountMutex = accountMutationMutex,
             canMutate = { !cloud.configured || session.state.value is AccountSessionState.Ready },
         )
@@ -81,6 +88,7 @@ class PixApplication : Application() {
         if (cloud.configured) {
             backgroundScope.launch {
                 session.state.collect { state ->
+                    widgetUpdater.requestUpdate()
                     if (state is AccountSessionState.Ready) {
                         sync.restoreForAccount(state.user.id)
                         CloudSyncWork.initialize(this@PixApplication)

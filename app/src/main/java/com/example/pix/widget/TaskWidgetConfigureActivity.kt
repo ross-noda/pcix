@@ -51,7 +51,9 @@ class TaskWidgetConfigureActivity : ComponentActivity() {
                 .getOrDefault(WidgetConfigMode.FULL)
         val store = TaskWidgetConfigStore(this)
         val initial = store.read(appWidgetId)
+        val backgrounds = WidgetBackgroundStore(this)
         setContent {
+            var background by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(backgrounds.read(appWidgetId)) }
             val app = application as PixApplication
             val lists by app.repository.lists.collectAsState(initial = emptyList())
             val tags by app.repository.tags.collectAsState(initial = emptyList())
@@ -62,9 +64,10 @@ class TaskWidgetConfigureActivity : ComponentActivity() {
                 textSize = themePrefs.getInt("textSize", 1),
                 fontStyle = themePrefs.getInt("fontStyle", 0),
             ) {
-                ConfigureContent(mode, initial, lists, tags) { config ->
+                ConfigureContent(mode, initial, lists, tags, background, { background = it }) { config ->
                     lifecycleScope.launch {
                         store.write(appWidgetId, config)
+                        backgrounds.write(appWidgetId, background)
                         val glanceId = GlanceAppWidgetManager(this@TaskWidgetConfigureActivity).getGlanceIdBy(appWidgetId)
                         TaskWidget().update(this@TaskWidgetConfigureActivity, glanceId)
                         setResult(
@@ -90,6 +93,8 @@ private fun ConfigureContent(
     initial: TaskWidgetConfig,
     lists: List<ListWithCount>,
     tags: List<TagWithCount>,
+    background: Int,
+    onBackground: (Int) -> Unit,
     onSave: (TaskWidgetConfig) -> Unit,
 ) {
     var filter by remember { mutableStateOf(initial.filterType) }
@@ -124,6 +129,7 @@ private fun ConfigureContent(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 20.dp),
         ) {
+            item { WidgetBackgroundChoices(background, onBackground) }
             if (mode != WidgetConfigMode.GROUPING) {
                 item { SectionLabel(R.string.widget_filter_title) }
                 item {

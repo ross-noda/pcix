@@ -6,6 +6,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MarkdownTest {
+    @Test fun mixedMultilineConsecutiveChecksKeepExactSourceOffsets() {
+        val source = "Normal **bold**\n\n- [ ] first\n  continued *text*\n- [x] second\n- [X] THIRD\n\nafter"
+        val checks = mutableListOf<Int>()
+        fun visit(node: Node) {
+            if (node is Paragraph) Markdown.checkboxOffset(source, node)?.let(checks::add)
+            var child = node.firstChild
+            while (child != null) { visit(child); child = child.next }
+        }
+        visit(Markdown.parse(source))
+        assertEquals(3, checks.size)
+        assertEquals(" xX", checks.map { source[it] }.joinToString(""))
+        val checked = Markdown.toggle(source, checks[0])
+        assertTrue(checked.contains("- [x] first\n  continued *text*"))
+        assertEquals(source, Markdown.toggle(checked, checks[0]))
+        assertEquals(' ', Markdown.toggle(source, checks[2])[checks[2]])
+        assertNotNull(Markdown.checkboxOffset("[ ] bare", Markdown.parse("[ ] bare").firstChild))
+    }
     @Test fun emptyDescriptionIsValid() { assertNull(Markdown.parse("").firstChild) }
     @Test fun parsesRequiredBlocksAndInlineFormatting() {
         val source="## Heading\n\n**bold** *italic* ~~strike~~ [link](https://example.com) `inline`\n\n> quote\n\n- item\n\n1. ordered\n\n```kotlin\nval x=1\n```"

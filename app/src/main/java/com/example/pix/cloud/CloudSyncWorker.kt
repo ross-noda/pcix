@@ -20,6 +20,9 @@ class CloudSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
         }
         if (!inputData.getBoolean("manual", false) && SyncRetryPolicy.blocked(app.sync.status.value)) return Result.failure()
         return try {
+            // A burst of edits may queue several successors. Earlier work can already have
+            // uploaded them all; avoid repeating network round trips for those empty requests.
+            if (inputData.getBoolean("changes", false) && app.sync.pendingCount() == 0) return Result.success()
             if (app.sync.synchronize()) Result.success()
             else if (SyncRetryPolicy.retry(app.sync.status.value, runAttemptCount)) Result.retry() else Result.failure()
         } catch (cancelled: CancellationException) {
@@ -50,12 +53,18 @@ object CloudSyncWork {
         } finally { manualMutex.unlock() }
     }
 
-    fun enqueue(context: Context) {
+    /** A mutation during push/pull needs a successor; KEEP alone would discard that request. */
+    fun enqueueChanges(context: Context) = enqueue(context, ExistingWorkPolicy.APPEND_OR_REPLACE)
+
+    fun enqueue(context: Context) = enqueue(context, ExistingWorkPolicy.KEEP)
+
+    private fun enqueue(context: Context, policy: ExistingWorkPolicy) {
         WorkManager.getInstance(context)
             .enqueueUniqueWork(
                 "cloud-sync",
-                ExistingWorkPolicy.KEEP,
+                policy,
                 OneTimeWorkRequestBuilder<CloudSyncWorker>()
+                    .setInputData(workDataOf("changes" to (policy == ExistingWorkPolicy.APPEND_OR_REPLACE)))
                     .setConstraints(
                         Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
                     )

@@ -29,6 +29,7 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
     AndroidViewModel(app) {
     private val repository = (app as PixApplication).repository
     private val backups = BackupRepository(app, (app as PixApplication).database)
+    val widgetDestination = MutableStateFlow<String?>(null)
     val backupBusy = MutableStateFlow(false)
     val pendingBackup = MutableStateFlow<BackupRepository.Prepared?>(null)
     val backupMessage = MutableStateFlow<Int?>(null)
@@ -84,7 +85,7 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         pendingBackup.value = null
         backupAction(com.example.pix.R.string.backup_restored) {
             backups.restore(prepared)
-            com.example.pix.cloud.CloudSyncWork.enqueue(getApplication())
+            com.example.pix.cloud.CloudSyncWork.enqueueChanges(getApplication())
             filter.value = TaskFilter(mode = startupView.value, showCompleted = true)
             runCatching { com.example.pix.reminders.ReminderWork.reconcile(getApplication()) }
         }
@@ -189,13 +190,19 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         clock.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ZonedDateTime.now())
     private val errorsChannel = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
     val errors = errorsChannel.asSharedFlow()
+    private val matrixPreferences = app.getSharedPreferences("matrix", 0)
+    val matrixConfig =
+        MutableStateFlow(
+            matrixPreferences.readMatrixConfig()
+        )
+
     val matrixContent =
-        combine(now.map { it.toLocalDate() }.distinctUntilChanged(), refresh) { date, _ -> date }
+        combine(now.map { it.toLocalDate() }.distinctUntilChanged(), refresh, matrixConfig) { date, _, config -> date to config }
             .flatMapLatest {
                 repository
                     .observe(
-                        TaskFilter(mode = "ALL"),
-                        it.atStartOfDay(java.time.ZoneId.systemDefault()),
+                        TaskFilter(mode = "ALL", rootsOnly = it.second.hideChildren),
+                        it.first.atStartOfDay(java.time.ZoneId.systemDefault()),
                     )
                     .map { rows -> TaskContent(loading = false, tasks = rows) }
                     .catch { emit(TaskContent(loading = false, failed = true)) }
@@ -282,19 +289,6 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
     private var editVersion = 0L
     private var savedVersion = 0L
     private val writes = Channel<suspend () -> Unit>(Channel.UNLIMITED)
-    private val matrixPreferences = app.getSharedPreferences("matrix", 0)
-    val matrixConfig =
-        MutableStateFlow(
-            com.example.pix.domain.MatrixConfig(
-                layout = matrixPreferences.getInt("layout", 0).coerceIn(0, 2),
-                columnSplit = matrixPreferences.getFloat("columns", .5f).coerceIn(.3f, .7f),
-                rowSplit = matrixPreferences.getFloat("rows", .5f).coerceIn(.3f, .7f),
-                cornerRadius = matrixPreferences.getFloat("corners", 20f).coerceIn(0f, 32f),
-                urgentDays = matrixPreferences.getInt("urgent", 0).coerceIn(0, 30),
-                importantPriority =
-                    matrixPreferences.getInt("important", 3).takeIf { it in listOf(1, 3, 5) } ?: 3,
-            )
-        )
 
     fun setMatrixConfig(value: com.example.pix.domain.MatrixConfig) {
         matrixConfig.value = value
@@ -306,6 +300,8 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
             .putFloat("corners", value.cornerRadius)
             .putInt("urgent", value.urgentDays)
             .putInt("important", value.importantPriority)
+            .putBoolean("hideChildren", value.hideChildren)
+            .putMatrixCards(value)
             .apply()
     }
 
@@ -319,6 +315,16 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
     val theme = MutableStateFlow(preferences.getInt("theme", 2))
 
     init {
+        // Reflect widget/cloud edits in an open editor without overwriting unsaved typing.
+        viewModelScope.launch {
+            selected.collect { detail ->
+                val current = draft.value
+                if (detail != null && current?.task?.id == detail.task.id &&
+                    selectedId.value == detail.task.id && editVersion == savedVersion && !isNewDraft.value) {
+                    draft.value = EditorDraft(detail.task, detail.tags.map { it.id }.toSet(), detail.series?.rule)
+                }
+            }
+        }
         viewModelScope.launch {
             for (write in writes) {
                 try {
@@ -337,9 +343,20 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         writes.trySend(block)
     }
 
+    private val editorHistory = mutableListOf<String>()
+
     fun openTask(id: String) {
+        val current = draft.value
+        if (current?.task?.id == id) return
+        if (current != null && current.task.seriesId != null && editVersion != savedVersion && editScope.value == null) {
+            scopeRequest.value = true
+            return
+        }
         flush()
-        action { repository.details(id)?.let { open(it) } }
+        action { repository.details(id)?.let {
+            if (current != null && TaskRules.validTitle(current.task.title)) editorHistory += current.task.id
+            showTask(it)
+        } }
     }
 
     fun retry() {
@@ -363,6 +380,7 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         }
 
     fun openNew(task: TaskEntity, tags: Set<String>) {
+        editorHistory.clear()
         flush()
         editorSession++
         selectedId.value = task.id
@@ -376,8 +394,13 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
     }
 
     fun open(detail: TaskWithDetails) {
-        isNewDraft.value = false
+        editorHistory.clear()
+        showTask(detail)
+    }
+
+    private fun showTask(detail: TaskWithDetails) {
         flush()
+        isNewDraft.value = false
         editorSession++
         selectedId.value = detail.task.id
         draft.value =
@@ -449,9 +472,16 @@ class TasksViewModel(app: Application, private val savedState: SavedStateHandle)
         flush()
         draft.value = null
         selectedId.value = null
+        if (editorHistory.isNotEmpty()) action {
+            while (editorHistory.isNotEmpty()) {
+                val previous = repository.details(editorHistory.removeAt(editorHistory.lastIndex))
+                if (previous != null) { showTask(previous); break }
+            }
+        }
     }
 
     fun deleteTask(id: String, scope: RecurrenceScope = RecurrenceScope.ONLY_THIS) {
+        editorHistory.clear()
         saveJob?.cancel()
         draft.value = null
         selectedId.value = null

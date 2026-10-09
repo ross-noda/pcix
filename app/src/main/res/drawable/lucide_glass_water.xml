@@ -1,0 +1,5 @@
+<!-- Lucide: see assets/licenses/lucide.txt -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+<path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M5.116 4.104 A1 1 0 0 1 6.11 3 h11.78 a1 1 0 0 1 .994 1.105 L17.19 20.21 A2 2 0 0 1 15.2 22 H8.8 a2 2 0 0 1 -2 -1.79 z"/>
+<path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M6 12 a5 5 0 0 1 6 0 a5 5 0 0 0 6 0"/>
+</vector>

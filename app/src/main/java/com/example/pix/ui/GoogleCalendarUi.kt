@@ -14,6 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
+import com.example.pix.ui.theme.ListColors
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -101,9 +103,10 @@ fun GoogleCalendarSettings() {
     val context = LocalContext.current
     val app = context.applicationContext as PixApplication
     val calendars by app.google.calendars.collectAsState(initial = emptyList())
-    val reconnect by app.google.needsReconnect.collectAsState()
+    val accounts by app.google.accounts.collectAsState(initial = emptyList())
+    val reconnectAccounts by app.google.reconnectAccounts.collectAsState()
     val connection by app.google.connection.collectAsState()
-    var picker by rememberSaveable { mutableStateOf(false) }
+    var picker by rememberSaveable { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     val busy = connection.busy || refreshing
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
@@ -139,15 +142,12 @@ fun GoogleCalendarSettings() {
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (errorLabel != null) Text(stringResource(errorLabel), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
             ListItem(
-                headlineContent = { Text(stringResource(R.string.google_calendar)) },
+                headlineContent = { Text(stringResource(R.string.google_add_account)) },
                 supportingContent = {
                     Text(
                         when {
                             connection.busy -> stringResource(R.string.google_connecting)
-                            reconnect -> stringResource(R.string.google_reconnect)
-                            connection.email != null ->
-                                connection.email
-                                    ?: stringResource(R.string.google_calendars_count, calendars.count { it.enabled })
+                            accounts.isNotEmpty() -> stringResource(R.string.google_accounts_count, accounts.size)
                             else -> stringResource(R.string.google_not_connected)
                         }
                     )
@@ -161,51 +161,49 @@ fun GoogleCalendarSettings() {
                         } catch (error: Exception) { app.google.reportFailure(error, "launch-account-picker") }
                     },
             )
-            if (connection.email != null) {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.google_choose)) },
-                    modifier = Modifier.clickable { picker = true },
-                )
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.google_refresh)) },
-                    modifier =
-                        Modifier.clickable {
-                            if (!busy) {
-                                refreshing = true
-                                app.backgroundScope.launch {
-                                    try { app.google.synchronize() }
-                                    catch (cancelled: CancellationException) { throw cancelled }
-                                    catch (error: Exception) { app.google.reportFailure(error, "manual-sync") }
-                                    finally { refreshing = false }
-                                }
-                            }
-                        },
-                )
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.google_disconnect)) },
-                    modifier =
-                        Modifier.clickable {
-                            if (!busy) app.backgroundScope.launch {
-                                try { app.google.disconnect(null) }
-                                catch (cancelled: CancellationException) { throw cancelled }
-                                catch (error: Exception) { app.google.reportFailure(error, "disconnect") }
-                            }
-                        },
-                )
+            accounts.forEach { account ->
+                key(account.id) {
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text(account.email) },
+                        supportingContent = { Text(stringResource(if (account.id in reconnectAccounts) R.string.google_reconnect else R.string.google_choose)) },
+                        modifier = Modifier.clickable(enabled = !busy) { picker = account.id },
+                    )
+                    Row(Modifier.padding(horizontal = 12.dp)) {
+                        TextButton(enabled = !busy, onClick = { app.backgroundScope.launch { app.google.authorize(accountEmail = account.email) } }) {
+                            Text(stringResource(R.string.google_renew_access))
+                        }
+                        TextButton(enabled = !busy, onClick = { app.backgroundScope.launch { app.google.disconnectAccount(account.id) } }) {
+                            Text(stringResource(R.string.google_disconnect))
+                        }
+                    }
+                }
             }
+            if (accounts.isNotEmpty()) ListItem(
+                headlineContent = { Text(stringResource(R.string.google_refresh)) },
+                modifier = Modifier.clickable(enabled = !busy) {
+                    refreshing = true
+                    app.backgroundScope.launch {
+                        try { app.google.synchronize() }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (error: Exception) { app.google.reportFailure(error, "manual-sync") }
+                        finally { refreshing = false }
+                    }
+                },
+            )
         }
     }
-    if (picker)
+    if (picker != null)
         AlertDialog(
-            onDismissRequest = { picker = false },
-            title = { Text(stringResource(R.string.google_choose)) },
+            onDismissRequest = { picker = null },
+            title = { Text(accounts.firstOrNull { it.id == picker }?.email ?: stringResource(R.string.google_choose)) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    calendars.forEach { calendar -> CalendarToggle(calendar, app) }
+                    calendars.filter { it.accountId == picker }.forEach { calendar -> key(calendar.accountId, calendar.id) { CalendarToggle(calendar, app) } }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { picker = false }) { Text(stringResource(R.string.close)) }
+                TextButton(onClick = { picker = null }) { Text(stringResource(R.string.close)) }
             },
         )
 }
@@ -213,10 +211,24 @@ fun GoogleCalendarSettings() {
 @Composable
 private fun CalendarToggle(calendar: GoogleCalendarEntity, app: PixApplication) {
     val scope = rememberCoroutineScope()
+    var colorPicker by remember { mutableStateOf(false) }
+    val colorLabel = stringResource(R.string.google_calendar_color, calendar.summary)
+    if (colorPicker) AlertDialog(
+        onDismissRequest = { colorPicker = false },
+        title = { Text(calendar.summary) },
+        text = { ColorPicker(ListColors.indexOfFirst { it.toArgb() == (calendar.localColorArgb ?: calendar.colorArgb) }) { index ->
+            scope.launch { app.google.setColor(calendar.id, ListColors[index].toArgb(), calendar.accountId) }
+            colorPicker = false
+        } },
+        confirmButton = { TextButton(onClick = {
+            scope.launch { app.google.setColor(calendar.id, null, calendar.accountId) }; colorPicker = false
+        }) { Text(stringResource(R.string.reset)) } },
+        dismissButton = { TextButton(onClick = { colorPicker = false }) { Text(stringResource(R.string.close)) } },
+    )
     Row(
         Modifier.fillMaxWidth().clickable {
             scope.launch {
-                app.google.setEnabled(calendar.id, !calendar.enabled)
+                app.google.setEnabled(calendar.id, !calendar.enabled, calendar.accountId)
                 GoogleCalendarWork.enqueue(app)
             }
         },
@@ -224,11 +236,14 @@ private fun CalendarToggle(calendar: GoogleCalendarEntity, app: PixApplication) 
     ) {
         Checkbox(calendar.enabled, { enabled ->
             scope.launch {
-                app.google.setEnabled(calendar.id, enabled)
+                app.google.setEnabled(calendar.id, enabled, calendar.accountId)
                 GoogleCalendarWork.enqueue(app)
             }
         })
-        Box(Modifier.size(10.dp).background(Color(calendar.colorArgb), CircleShape))
-        Text(calendar.summary, Modifier.padding(start = 12.dp))
+        Text(calendar.summary, Modifier.weight(1f).padding(start = 8.dp))
+        IconButton(onClick = { colorPicker = true }) {
+            Box(Modifier.size(22.dp).background(Color(calendar.localColorArgb ?: calendar.colorArgb), CircleShape)
+                .semantics { contentDescription = colorLabel })
+        }
     }
 }

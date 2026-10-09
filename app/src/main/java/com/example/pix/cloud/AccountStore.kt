@@ -39,7 +39,7 @@ class AccountStore(private val context: Context, private val db: PixDatabase) : 
 
     override suspend fun hasLegacyData(): Boolean {
         val counts = counts()
-        return counts.tasks > 0 || counts.lists > 1 || counts.tags > 0
+        return db.habitDao().habits().isNotEmpty() || db.habitDao().groups().isNotEmpty() || counts.tasks > 0 || counts.lists > 1 || counts.tags > 0
     }
 
     suspend fun importLegacy() {
@@ -70,6 +70,8 @@ class AccountStore(private val context: Context, private val db: PixDatabase) : 
 
     override suspend fun wipeUserData() {
         db.withTransaction {
+            db.habitDao().clearHabits()
+            db.habitDao().clearGroups()
             db.dao().clearReceipts()
             db.dao().clearImages()
             db.dao().clearTaskTags()

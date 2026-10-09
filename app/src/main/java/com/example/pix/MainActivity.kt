@@ -17,6 +17,9 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,16 +53,25 @@ class MainActivity : ComponentActivity() {
             val model: TasksViewModel = viewModel(viewModelStoreOwner = modelOwner,
                 key = "tasks:$modelAccount",
                 factory = defaultViewModelProviderFactory, extras = defaultViewModelCreationExtras)
+            val habitModel: com.example.pix.ui.HabitsViewModel = viewModel(viewModelStoreOwner = modelOwner,
+                key = "habits:$modelAccount", factory = defaultViewModelProviderFactory, extras = defaultViewModelCreationExtras)
             LaunchedEffect(model) { handleWidgetIntent(intent, model) }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
+            LaunchedEffect(lifecycle, modelAccount, sessionState is AccountSessionState.Ready) {
+                if (app.cloud.configured && sessionState is AccountSessionState.Ready) {
+                    lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                        while (isActive) {
+                            CloudSyncWork.enqueue(this@MainActivity)
+                            delay(60_000L)
+                        }
+                    }
+                }
+            }
             DisposableEffect(lifecycle, model) {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_STOP) model.flush()
                     if (event == Lifecycle.Event.ON_RESUME) {
                         ReminderWork.reconcile(this@MainActivity)
-                        if (app.session.state.value is AccountSessionState.Ready) {
-                            CloudSyncWork.enqueue(this@MainActivity)
-                        }
                         GoogleCalendarWork.enqueue(this@MainActivity)
                     }
                 }
@@ -90,7 +102,7 @@ class MainActivity : ComponentActivity() {
                     contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                 ) {
                 when {
-                    !app.cloud.configured -> PixApp(model)
+                    !app.cloud.configured -> PixApp(model, habitModel)
                     sessionState is AccountSessionState.Restoring ||
                         sessionState is AccountSessionState.PreparingAccount -> SplashScreen()
                     sessionState is AccountSessionState.SignedOut -> AuthScreen()
@@ -98,7 +110,7 @@ class MainActivity : ComponentActivity() {
                     sessionState is AccountSessionState.LegacyDecision -> LegacyImportScreen()
                     sessionState is AccountSessionState.Error ->
                         SessionErrorScreen((sessionState as AccountSessionState.Error).messageRes)
-                    sessionState is AccountSessionState.Ready -> PixApp(model)
+                    sessionState is AccountSessionState.Ready -> PixApp(model, habitModel)
                 }
                 }
             }
@@ -109,16 +121,25 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthIntent(intent)
-        if (intent.action == ACTION_NEW_TASK || intent.action == ACTION_OPEN_TASK) recreate()
+        if (intent.hasExtra("habitId")) recreate()
+        if (intent.action == ACTION_NEW_TASK || intent.action == ACTION_OPEN_TASK || intent.action == ACTION_OPEN_PLANNER) recreate()
     }
 
     private fun handleWidgetIntent(intent: Intent?, model: TasksViewModel) {
+        intent?.getStringExtra("habitId")?.let { id ->
+            if (runCatching { java.util.UUID.fromString(id) }.isSuccess) model.widgetDestination.value = "habit/$id"
+            intent.removeExtra("habitId")
+        }
         when (intent?.action) {
             ACTION_NEW_TASK -> {
                 val initialDay =
                     intent.takeIf { it.hasExtra(EXTRA_INITIAL_DAY) }
                         ?.getLongExtra(EXTRA_INITIAL_DAY, 0L)
                 model.openNew(TaskEntity(title = "", dueDay = initialDay), emptySet())
+            }
+            ACTION_OPEN_PLANNER -> {
+                if (intent.hasExtra(EXTRA_INITIAL_DAY)) model.selectDate(intent.getLongExtra(EXTRA_INITIAL_DAY, 0))
+                model.widgetDestination.value = intent.getStringExtra("destination")?.takeIf { it == "calendar" || it == "matrix" || it == "habits" }
             }
             ACTION_OPEN_TASK -> intent.getStringExtra(EXTRA_TASK_ID)?.let(model::openTask)
             else -> intent?.getStringExtra(EXTRA_TASK_ID)?.let(model::openTask)
@@ -127,6 +148,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_NEW_TASK = "com.example.pix.action.NEW_TASK"
+        const val ACTION_OPEN_PLANNER = "com.example.pix.action.OPEN_PLANNER"
         const val ACTION_OPEN_TASK = "com.example.pix.action.OPEN_TASK"
         const val EXTRA_TASK_ID = "taskId"
         const val EXTRA_INITIAL_DAY = "initialDay"

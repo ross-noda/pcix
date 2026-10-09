@@ -49,14 +49,7 @@ import androidx.glance.text.TextStyle
 import com.example.pix.R
 
 class CalendarWeekWidget : GlanceAppWidget() {
-    override val sizeMode: SizeMode =
-        SizeMode.Responsive(
-            setOf(
-                DpSize(180.dp, 150.dp),
-                DpSize(280.dp, 220.dp),
-                DpSize(360.dp, 360.dp),
-            )
-        )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
@@ -70,7 +63,7 @@ class CalendarWeekWidget : GlanceAppWidget() {
                 context = context,
                 appWidgetId = appWidgetId,
                 content = content,
-                palette = WidgetPalette.forContext(context),
+                palette = WidgetPalette.forContext(context).let { it.copy(textScale = it.textScale * widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)) },
             )
         }
     }
@@ -83,19 +76,20 @@ private fun CalendarWidgetSurface(
     content: CalendarWidgetContent?,
     palette: WidgetPalette,
 ) {
+    val scale = widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)
     val size = LocalSize.current
     val compact = size.width < 250.dp || size.height < 180.dp
-    val large = size.width >= 340.dp && size.height >= 300.dp
+    val large = size.width >= (340 * scale).dp && size.height >= (300 * scale).dp
 
     Column(
         modifier =
             GlanceModifier.fillMaxSize()
-                .background(palette.surface, palette.surface)
+                .background(widgetBackground(context, appWidgetId), widgetBackground(context, appWidgetId))
                 .cornerRadius(R.dimen.widget_corner_radius)
                 .appWidgetBackground()
                 .padding(
-                    horizontal = if (compact) 7.dp else 11.dp,
-                    vertical = if (compact) 5.dp else 7.dp,
+                    horizontal = if (compact) (7 * scale).dp else (11 * scale).dp,
+                    vertical = if (compact) (5 * scale).dp else (7 * scale).dp,
                 ),
     ) {
         CalendarHeader(
@@ -112,12 +106,12 @@ private fun CalendarWidgetSurface(
         }
 
         WeekStrip(context, appWidgetId, content, palette, compact)
-        Spacer(GlanceModifier.height(if (compact) 2.dp else 4.dp))
+        Spacer(GlanceModifier.height(if (compact) (2 * scale).dp else (4 * scale).dp))
         Box(
             modifier =
-                GlanceModifier.fillMaxWidth().height(1.dp).background(palette.divider, palette.divider)
+                GlanceModifier.fillMaxWidth().height((1 * scale).dp).background(palette.divider, palette.divider)
         ) {}
-        Spacer(GlanceModifier.height(if (compact) 2.dp else 5.dp))
+        Spacer(GlanceModifier.height(if (compact) (2 * scale).dp else (5 * scale).dp))
 
         if (content.tasks.isEmpty()) {
             CalendarEmptyState(context.getString(R.string.calendar_widget_empty), palette)
@@ -145,30 +139,31 @@ private fun CalendarHeader(
     palette: WidgetPalette,
     compact: Boolean,
 ) {
+    val scale = widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)
     val selectedDay = content?.config?.selectedEpochDay
     Row(
-        modifier = GlanceModifier.fillMaxWidth().height(if (compact) 34.dp else 38.dp),
+        modifier = GlanceModifier.fillMaxWidth().height(if (compact) (34 * scale).dp else (38 * scale).dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CalendarIconButton(
             drawable = R.drawable.ic_widget_calendar,
             description = context.getString(R.string.go_today),
             palette = palette,
-            size = if (compact) 28.dp else 32.dp,
-            iconSize = if (compact) 18.dp else 20.dp,
+            size = if (compact) (28 * scale).dp else (32 * scale).dp,
+            iconSize = if (compact) (18 * scale).dp else (20 * scale).dp,
             action = calendarTodayAction(context, appWidgetId),
         )
         CalendarIconButton(
             drawable = R.drawable.ic_widget_chevron_left,
             description = context.getString(R.string.previous_week),
             palette = palette,
-            size = if (compact) 27.dp else 31.dp,
-            iconSize = 18.dp,
+            size = if (compact) (27 * scale).dp else (31 * scale).dp,
+            iconSize = (18 * scale).dp,
             action = calendarPreviousWeekAction(context, appWidgetId),
         )
         Text(
             text = content?.monthLabel.orEmpty(),
-            modifier = GlanceModifier.defaultWeight().padding(horizontal = 2.dp),
+            modifier = GlanceModifier.defaultWeight().padding(horizontal = (2 * scale).dp),
             maxLines = 1,
             style =
                 TextStyle(
@@ -181,16 +176,16 @@ private fun CalendarHeader(
             drawable = R.drawable.ic_widget_chevron_right,
             description = context.getString(R.string.next_week),
             palette = palette,
-            size = if (compact) 27.dp else 31.dp,
-            iconSize = 18.dp,
+            size = if (compact) (27 * scale).dp else (31 * scale).dp,
+            iconSize = (18 * scale).dp,
             action = calendarNextWeekAction(context, appWidgetId),
         )
         CalendarIconButton(
             drawable = R.drawable.ic_widget_add,
             description = context.getString(R.string.widget_add_task),
             palette = palette,
-            size = if (compact) 28.dp else 32.dp,
-            iconSize = if (compact) 18.dp else 20.dp,
+            size = if (compact) (28 * scale).dp else (32 * scale).dp,
+            iconSize = if (compact) (18 * scale).dp else (20 * scale).dp,
             action = newTaskAction(context, selectedDay),
         )
         if (!compact) {
@@ -198,8 +193,8 @@ private fun CalendarHeader(
                 drawable = R.drawable.ic_widget_more,
                 description = context.getString(R.string.widget_more_options),
                 palette = palette,
-                size = 32.dp,
-                iconSize = 18.dp,
+                size = (32 * scale).dp,
+                iconSize = (18 * scale).dp,
                 action = calendarConfigAction(context, appWidgetId),
             )
         }
@@ -215,6 +210,7 @@ private fun CalendarIconButton(
     iconSize: androidx.compose.ui.unit.Dp,
     action: androidx.glance.action.Action,
 ) {
+    val scale = widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)
     Box(
         modifier = GlanceModifier.size(size).clickable(action),
         contentAlignment = Alignment.Center,
@@ -236,8 +232,9 @@ private fun WeekStrip(
     palette: WidgetPalette,
     compact: Boolean,
 ) {
+    val scale = widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)
     Row(
-        modifier = GlanceModifier.fillMaxWidth().height(if (compact) 50.dp else 58.dp),
+        modifier = GlanceModifier.fillMaxWidth().height(if (compact) (50 * scale).dp else (58 * scale).dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         content.days.forEach { day ->
@@ -277,16 +274,16 @@ private fun WeekStrip(
                                 fontWeight = if (day.today) FontWeight.Bold else FontWeight.Normal,
                             ),
                     )
-                    Spacer(GlanceModifier.height(1.dp))
+                    Spacer(GlanceModifier.height((1 * scale).dp))
                     val dayBackground = if (day.selected) palette.accent else palette.surface
                     Box(
                         modifier =
-                            GlanceModifier.size(if (compact) 22.dp else 32.dp)
+                            GlanceModifier.size(if (compact) (22 * scale).dp else (32 * scale).dp)
                                 // Always write a background value. RemoteViews re-application can
                                 // otherwise retain the previous selected-day background when a
                                 // modifier disappears on the next update.
                                 .background(dayBackground, dayBackground)
-                                .cornerRadius(if (compact) 11.dp else 16.dp),
+                                .cornerRadius(if (compact) (11 * scale).dp else (16 * scale).dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -309,7 +306,7 @@ private fun WeekStrip(
                                 ),
                         )
                     }
-                    Spacer(GlanceModifier.height(if (compact) 1.dp else 2.dp))
+                    Spacer(GlanceModifier.height(if (compact) (1 * scale).dp else (2 * scale).dp))
                     DayTaskMarkers(day.markerColorsArgb, palette, compact)
                 }
             }
@@ -323,10 +320,11 @@ private fun DayTaskMarkers(
     palette: WidgetPalette,
     compact: Boolean,
 ) {
-    val dotSize = if (compact) 3.dp else 4.dp
-    val gap = if (compact) 1.dp else 2.dp
+    val scale = widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)
+    val dotSize = if (compact) (3 * scale).dp else (4 * scale).dp
+    val gap = if (compact) (1 * scale).dp else (2 * scale).dp
     Row(
-        modifier = GlanceModifier.height(if (compact) 4.dp else 5.dp),
+        modifier = GlanceModifier.height(if (compact) (4 * scale).dp else (5 * scale).dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Keep exactly three marker slots in the RemoteViews tree. Conditional children can leave
@@ -339,7 +337,7 @@ private fun DayTaskMarkers(
                 modifier =
                     GlanceModifier.size(dotSize)
                         .background(markerColor, markerColor)
-                        .cornerRadius(2.dp),
+                        .cornerRadius((2 * scale).dp),
             ) {}
         }
     }
@@ -353,21 +351,22 @@ private fun CalendarTaskRow(
     compact: Boolean,
     large: Boolean,
 ) {
-    val rowHeight = if (compact) 26.dp else if (large) 30.dp else 28.dp
+    val scale = widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)
+    val rowHeight = if (compact) (26 * scale).dp else if (large) (30 * scale).dp else (28 * scale).dp
     Row(
         modifier = GlanceModifier.fillMaxWidth().height(rowHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier =
-                GlanceModifier.width(3.dp)
+                GlanceModifier.width((3 * scale).dp)
                     .fillMaxHeight()
                     .background(Color(task.listColorArgb), Color(task.listColorArgb))
         ) {}
-        Spacer(GlanceModifier.width(4.dp))
+        Spacer(GlanceModifier.width((4 * scale).dp))
         Box(
             modifier =
-                GlanceModifier.width(if (compact) 28.dp else 31.dp)
+                GlanceModifier.width(if (compact) (28 * scale).dp else (31 * scale).dp)
                     .height(rowHeight)
                     .clickable(
                         actionRunCallback<CompleteTaskAction>(
@@ -390,7 +389,7 @@ private fun CalendarTaskRow(
                         if (task.isCompleted) R.string.widget_reopen_task else R.string.widget_complete_task,
                         task.title,
                     ),
-                modifier = GlanceModifier.size(if (compact) 16.dp else 18.dp),
+                modifier = GlanceModifier.size(if (compact) (16 * scale).dp else (18 * scale).dp),
                 colorFilter =
                     ColorFilter.tint(
                         fixedColorProvider(
@@ -400,7 +399,7 @@ private fun CalendarTaskRow(
                     ),
             )
         }
-        Spacer(GlanceModifier.width(2.dp))
+        Spacer(GlanceModifier.width((2 * scale).dp))
         Row(
             modifier =
                 GlanceModifier.defaultWeight()
@@ -423,7 +422,7 @@ private fun CalendarTaskRow(
                     ),
             )
             if (!compact && task.timeLabel.isNotBlank()) {
-                Spacer(GlanceModifier.width(5.dp))
+                Spacer(GlanceModifier.width((5 * scale).dp))
                 Text(
                     text = task.timeLabel,
                     maxLines = 1,
@@ -440,6 +439,7 @@ private fun CalendarTaskRow(
 
 @Composable
 private fun CalendarEmptyState(text: String, palette: WidgetPalette) {
+    val scale = widgetContentScale(LocalSize.current.width.value, LocalSize.current.height.value, 180f)
     Box(modifier = GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
             text = text,

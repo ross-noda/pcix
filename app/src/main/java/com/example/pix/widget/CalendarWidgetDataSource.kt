@@ -54,7 +54,7 @@ class CalendarWidgetDataSource(private val context: Context) {
             } else {
                 repository
                     .observe(
-                        TaskFilter(mode = "WEEK", showCompleted = true),
+                        TaskFilter(mode = "WEEK", showCompleted = true, rootsOnly = true),
                         weekStart.atStartOfDay(ZoneId.systemDefault()),
                     )
                     .first()
@@ -138,7 +138,7 @@ class CalendarWidgetDataSource(private val context: Context) {
     private fun TaskWithDetails.toWidgetTask(selectedDay: Long, locale: Locale): CalendarWidgetTask =
         CalendarWidgetTask(
             id = task.id,
-            title = (if(task.parentTaskId!=null) "↳ " else "") + task.title,
+            title = task.title,
             timeLabel =
                 if (task.dueDay == selectedDay && task.minuteOfDay != null) {
                     LocalTime.of(task.minuteOfDay / 60, task.minuteOfDay % 60)

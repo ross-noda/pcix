@@ -20,6 +20,27 @@
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.sharing" android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/sharing_paths" />
         </provider>
+        <activity android:name=".widget.SingleTaskWidgetConfigureActivity" android:exported="true" android:theme="@style/Theme.Pix">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
+        </activity>
+        <receiver android:name=".widget.SingleTaskWidgetReceiver" android:exported="true" android:label="@string/single_task_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/single_task_widget_info" />
+        </receiver>
+        <receiver android:name=".widget.HabitWidgetTapReceiver" android:exported="false" />
+        <receiver android:name=".widget.HabitWidgetReceiver" android:exported="true" android:label="@string/h_widget_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/habit_widget_info" />
+        </receiver>
+        <receiver android:name=".widget.MonthWidgetInteractionReceiver" android:exported="false" />
+        <receiver android:name=".widget.CalendarMonthWidgetReceiver" android:exported="true" android:label="@string/month_widget_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/month_widget_info" />
+        </receiver>
+        <receiver android:name=".widget.MatrixWidgetReceiver" android:exported="true" android:label="@string/matrix_widget_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/matrix_widget_info" />
+        </receiver>
         <receiver
             android:name=".widget.TaskWidgetReceiver"
             android:exported="true"
@@ -54,6 +75,10 @@
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
+        <activity android:name=".widget.WidgetBackgroundConfigureActivity" android:exported="true" android:theme="@style/Theme.Pix" />
+        <activity android:name=".widget.MonthWidgetConfigureActivity" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
+        </activity>
         <activity
             android:name=".widget.TaskWidgetConfigureActivity"
             android:exported="true"
@@ -100,6 +125,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+        <receiver android:name=".reminders.HabitReminderReceiver" android:exported="false" />
     </application>
 
 </manifest>

@@ -16,6 +16,22 @@ class SyncFailureTest {
             assertFalse(SyncRetryPolicy.retry(error.status, 0))
         }
     }
+    @Test fun legacyServerWithoutHabitSupportRequiresMigrations() {
+        for (type in listOf("habit_groups", "habits", "habit_rules", "habit_logs")) {
+            val error = SyncHttpFailure.from("push:$type", CloudHttp.Response(400,
+                """{"code":"P0001","message":"unknown entity"}""", emptyMap()))
+            assertEquals(CloudSyncStatus.SchemaMissing, error.status)
+            assertFalse(SyncRetryPolicy.retry(error.status, 0))
+            assertFalse(error.message!!.contains("unknown entity"))
+        }
+    }
+    @Test fun unrelatedValidationErrorsAreNotHiddenAsSchemaFailures() {
+        for ((stage, message) in listOf("push:habits" to "payload identity mismatch", "push:tasks" to "unknown entity")) {
+            val error = SyncHttpFailure.from(stage, CloudHttp.Response(400,
+                """{"code":"P0001","message":"$message"}""", emptyMap()))
+            assertEquals(CloudSyncStatus.InvalidData, error.status)
+        }
+    }
     @Test fun temporaryFailuresHaveBoundedRetries() {
         for (http in listOf(408, 429, 500, 503)) {
             val status = SyncHttpFailure("pull", http, null).status

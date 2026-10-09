@@ -1,0 +1,7 @@
+<!-- Lucide: see assets/licenses/lucide.txt -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+<path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M11 15 H7"/>
+<path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M15.41 2.49 a.6 .6 0 0 1 1.18 0 l.63 3.334 a1.2 1.2 0 0 0 .956 .955 l3.334 .631 a.6 .6 0 0 1 0 1.18 l-3.334 .63 a1.2 1.2 0 0 0 -.955 .956 l-.631 3.334 a.6 .6 0 0 1 -1.18 0 l-.63 -3.334 a1.2 1.2 0 0 0 -.956 -.955 L10.49 8.59 a.6 .6 0 0 1 0 -1.18 l3.334 -.63 a1.2 1.2 0 0 0 .955 -.956 z"/>
+<path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M21 13 v6 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 V5 a2 2 0 0 1 2 -2 h6"/>
+<path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M9 13 v4"/>
+</vector>

@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 
 class TaskWidgetDateChangeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        WidgetDayWorker.schedule(context, androidx.work.ExistingWorkPolicy.REPLACE)
         val pending = goAsync()
         val app = context.applicationContext as PixApplication
         app.backgroundScope.launch {

@@ -29,7 +29,7 @@ class TaskWidgetDataSource(private val context: Context) {
         if (config != stored) store.write(appWidgetId, config)
 
         val now = ZonedDateTime.now()
-        val filter = config.toTaskFilter()
+        val filter = config.toTaskFilter().copy(rootsOnly = true)
         val tasks = repository.observe(filter, now).first()
         val neutralColor =
             context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
@@ -256,7 +256,7 @@ class TaskWidgetDataSource(private val context: Context) {
     private fun TaskWithDetails.toWidgetTask(now: ZonedDateTime): WidgetTask =
         WidgetTask(
             id = task.id,
-            title = (if(task.parentTaskId!=null) "↳ " else "") + task.title,
+            title = task.title,
             dueLabel = task.dueDay?.let(::formatDueDate).orEmpty(),
             overdue = isOverdue(this, now),
             priority = task.priority,

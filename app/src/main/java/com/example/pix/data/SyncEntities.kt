@@ -68,6 +68,7 @@ data class GoogleCalendarEntity(
     val timeZone: String? = null,
     val enabled: Boolean = true,
     val accessRole: String? = null,
+    val localColorArgb: Int? = null,
 )
 
 @Entity(

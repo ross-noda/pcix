@@ -101,6 +101,10 @@ interface PixDao {
     )
     fun observeDay(day: Long): Flow<List<TaskWithDetails>>
 
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE parentTaskId IS NULL AND isTemplate=0 AND isSkipped=0 AND isCompleted=0 AND dueDay < :end AND (dueDay + (COALESCE(minuteOfDay,0) + MAX(COALESCE(durationMinutes,1)-1,0))/1440) >= :start ORDER BY dueDay,minuteOfDay,priority DESC,id")
+    fun observeWidgetRange(start: Long, end: Long): Flow<List<TaskWithDetails>>
+
     @Query(
         "WITH RECURSIVE days(day) AS (SELECT :start UNION ALL SELECT day+1 FROM days WHERE day+1 < :end) SELECT days.day AS dueDay, lists.color AS color, COUNT(*) AS count FROM days JOIN tasks ON tasks.dueDay <= days.day AND (tasks.dueDay + (COALESCE(tasks.minuteOfDay,0) + MAX(COALESCE(tasks.durationMinutes,1)-1,0))/1440) >= days.day JOIN lists ON lists.id=tasks.listId WHERE tasks.isTemplate=0 AND tasks.isSkipped=0 AND tasks.isCompleted=0 GROUP BY days.day, lists.id ORDER BY days.day, lists.sortOrder"
     )
@@ -110,6 +114,7 @@ interface PixDao {
     @Query(
         """
         SELECT * FROM tasks WHERE isTemplate=0 AND isSkipped=0 AND
+        (:rootsOnly = 0 OR parentTaskId IS NULL) AND
         (:listId IS NULL OR listId = :listId) AND
         (:tagId IS NULL OR id IN (SELECT taskId FROM task_tags WHERE tagId = :tagId)) AND
         (:showCompleted OR isCompleted = 0) AND
@@ -135,6 +140,7 @@ interface PixDao {
         search: String,
         showCompleted: Boolean,
         manual: Boolean,
+        rootsOnly: Boolean = false,
     ): Flow<List<TaskWithDetails>>
 
     @Transaction
@@ -341,6 +347,21 @@ interface SyncDao {
 
 @Dao
 interface GoogleDao {
+    @Query("SELECT * FROM google_calendar_accounts ORDER BY email,id")
+    fun observeAccounts(): Flow<List<GoogleCalendarAccountEntity>>
+
+    @Query("SELECT * FROM google_calendar_accounts ORDER BY email,id")
+    suspend fun accounts(): List<GoogleCalendarAccountEntity>
+
+    @Query("DELETE FROM google_calendar_accounts WHERE id=:accountId")
+    suspend fun deleteAccount(accountId: String)
+
+    @Query("SELECT * FROM google_calendars ORDER BY accountId,summary,id")
+    fun observeAllCalendars(): Flow<List<GoogleCalendarEntity>>
+
+    @Query("SELECT e.* FROM google_events e JOIN google_calendars c ON c.accountId=e.accountId AND c.id=e.calendarId WHERE e.cancelled=0 AND c.enabled=1 AND e.startDay < :end AND e.endDay > :start ORDER BY e.startDay,e.startMinute,e.accountId,e.calendarId,e.eventId")
+    fun observeAllEvents(start: Long, end: Long): Flow<List<GoogleEventEntity>>
+
     @Query("SELECT * FROM google_calendar_accounts LIMIT 1")
     fun observeAccount(): Flow<GoogleCalendarAccountEntity?>
 
@@ -407,6 +428,7 @@ interface GoogleDao {
 @Database(
     entities =
         [
+            HabitGroupEntity::class, HabitEntity::class, HabitRuleEntity::class, HabitLogEntity::class,
             TaskEntity::class,
             TaskImage::class,
             ListEntity::class,
@@ -422,10 +444,12 @@ interface GoogleDao {
             GoogleEventEntity::class,
             GoogleSyncStateEntity::class,
         ],
-    version = 9,
+    version = 12,
     exportSchema = true,
 )
 abstract class PixDatabase : RoomDatabase() {
+    abstract fun habitDao(): HabitDao
+
     abstract fun dao(): PixDao
 
     abstract fun syncDao(): SyncDao
@@ -433,6 +457,21 @@ abstract class PixDatabase : RoomDatabase() {
     abstract fun googleDao(): GoogleDao
 
     companion object {
+        val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE habits ADD COLUMN csvId TEXT")
+                db.execSQL("ALTER TABLE habits ADD COLUMN unit TEXT NOT NULL DEFAULT 'rep'")
+                db.execSQL("ALTER TABLE habit_logs ADD COLUMN sourceStatus TEXT")
+            }
+        }
+        val MIGRATION_10_11 = HabitMigration
+
+        val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE google_calendars ADD COLUMN localColorArgb INTEGER")
+            }
+        }
+
         val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = TaskHierarchy.migrate(db)
         }
@@ -596,6 +635,9 @@ abstract class PixDatabase : RoomDatabase() {
                     MIGRATION_6_7,
                     MIGRATION_7_8,
                     MIGRATION_8_9,
+                    MIGRATION_9_10,
+                    MIGRATION_10_11,
+                    MIGRATION_11_12,
                 )
                 .build()
     }

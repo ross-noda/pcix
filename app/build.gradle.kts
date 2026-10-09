@@ -29,6 +29,8 @@ android {
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${secret("google.webClientId")}\"")
     }
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     sourceSets {
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
@@ -89,6 +91,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    // Exercise Android widget preferences and live Compose updates without a physical device.
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.work.testing)
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
@@ -101,3 +108,18 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
+// Optional personal CSV fixture is packaged only in the test APK, never in the app.
+val habitCsvFixture = providers.environmentVariable("PIX_HABIT_CSV_FIXTURE")
+val prepareHabitCsvFixture by tasks.registering(Sync::class) {
+    into(layout.buildDirectory.dir("generated/habitCsvTestAssets"))
+    if (habitCsvFixture.isPresent) {
+        from(habitCsvFixture) { rename { "habit-import-fixture.csv" } }
+    }
+}
+android.sourceSets.getByName("androidTest").assets.directories.add(
+    layout.buildDirectory.dir("generated/habitCsvTestAssets").get().asFile.absolutePath
+)
+tasks.matching { it.name.contains("AndroidTest") }.configureEach {
+    dependsOn(prepareHabitCsvFixture)
+}

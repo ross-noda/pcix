@@ -1,15 +1,14 @@
 package com.example.pix.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.AnnotatedString
 import com.example.pix.ui.theme.LocalTextScale
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -22,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
@@ -29,7 +29,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.pix.R
 import com.example.pix.data.*
 import com.example.pix.domain.*
@@ -43,8 +42,8 @@ val quadrantLabels =
         R.string.quadrant_delegate,
         R.string.quadrant_eliminate,
     )
-private val quadrantColors =
-    listOf(Color(0xFFFF6D80), Color(0xFFFFCB55), Color(0xFF8199FF), Color(0xFF39CBA9))
+internal val quadrantColors =
+    listOf(Color(0xFFEF5964), Color(0xFFF1BE37), Color(0xFF607DE2), Color(0xFF28C6A3))
 
 @Composable
 fun MatrixScreen(
@@ -55,189 +54,106 @@ fun MatrixScreen(
     complete: (TaskEntity) -> Unit,
     add: (Int) -> Unit,
     retry: () -> Unit,
+    configure: (MatrixConfig) -> Unit = {},
 ) {
-    if (content.loading) {
-        LinearProgressIndicator(Modifier.fillMaxWidth())
-        return
-    }
-    if (content.failed) {
-        TextButton(onClick = retry) { Text(stringResource(R.string.retry)) }
-        return
-    }
-    val groups = content.tasks.groupBy { MatrixRules.quadrant(it.task, today, config) }
-    val gap = 8.dp
-    @Composable
-    fun cell(index: Int, modifier: Modifier) {
-        Quadrant(index, groups[index].orEmpty(), config, modifier, open, complete, { add(index) })
-    }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-    val availableWidth = maxWidth
-    val density = LocalDensity.current
-    val measurer = rememberTextMeasurer()
-    val headingStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp * LocalTextScale.current, lineHeight = 13.sp * LocalTextScale.current)
-    val requiredWidth = quadrantLabels.maxOf { label ->
-        with(density) { measurer.measure(AnnotatedString(stringResource(label)), headingStyle, softWrap = false).size.width.toDp() }
-    } + (if (config.cornerRadius > 20f) 26.dp else 14.dp)
-    val narrowest = (availableWidth - 24.dp) * minOf(config.columnSplit, 1 - config.columnSplit)
-    val layout = if (config.layout == 0 && narrowest < requiredWidth) 1 else config.layout
-    when (layout) {
-        1 ->
-            Column(
-                Modifier.fillMaxSize().padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(gap),
-            ) {
-                (0..3).forEach {
-                    cell(
-                        it,
-                        Modifier.weight(if (it < 2) config.rowSplit else 1 - config.rowSplit)
-                            .fillMaxWidth(),
-                    )
-                }
+    if (content.loading) { LinearProgressIndicator(Modifier.fillMaxWidth()); return }
+    if (content.failed) { TextButton(onClick = retry) { Text(stringResource(R.string.retry)) }; return }
+    val groups = MatrixRules.groups(content.tasks, today, config)
+    val order = MatrixRules.orderedIds(config)
+    Column(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val availableWidth = maxWidth
+            val scale = LocalDensity.current.fontScale * LocalTextScale.current
+            val gridHeight = maxHeight.coerceAtLeast(480.dp * scale)
+            @Composable fun cell(index: Int, modifier: Modifier, bounded: Boolean) {
+                Quadrant(order[index], groups[order[index]].orEmpty(), today, config, modifier, bounded, open, complete) { add(index) }
             }
-        2 ->
-            Row(
-                Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(gap),
-            ) {
-                (0..3).forEach {
-                    cell(
-                        it,
-                        Modifier.width(
-                                ((availableWidth - 24.dp) * (if (it % 2 == 0) config.columnSplit else 1 - config.columnSplit)).coerceAtLeast(requiredWidth)
-                            )
-                            .fillMaxHeight(),
-                    )
+            when {
+                config.layout == 2 -> Row(Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(4) { cell(it, Modifier.width((availableWidth * (if (it % 2 == 0) config.columnSplit else 1 - config.columnSplit)).coerceAtLeast(280.dp * scale)).fillMaxHeight(), true) }
                 }
-            }
-        else ->
-            Column(
-                Modifier.fillMaxSize().padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(gap),
-            ) {
-                Row(
-                    Modifier.weight(config.rowSplit),
-                    horizontalArrangement = Arrangement.spacedBy(gap),
-                ) {
-                    cell(0, Modifier.weight(config.columnSplit).fillMaxHeight())
-                    cell(1, Modifier.weight(1 - config.columnSplit).fillMaxHeight())
+                config.layout == 0 -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    Column(Modifier.fillMaxWidth().height(gridHeight).padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    repeat(2) { row -> Row(Modifier.weight(if (row == 0) config.rowSplit else 1 - config.rowSplit), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        cell(row * 2, Modifier.weight(config.columnSplit).fillMaxHeight(), true)
+                        cell(row * 2 + 1, Modifier.weight(1 - config.columnSplit).fillMaxHeight(), true)
+                    } }
                 }
-                Row(
-                    Modifier.weight(1 - config.rowSplit),
-                    horizontalArrangement = Arrangement.spacedBy(gap),
-                ) {
-                    cell(2, Modifier.weight(config.columnSplit).fillMaxHeight())
-                    cell(3, Modifier.weight(1 - config.columnSplit).fillMaxHeight())
                 }
-            }
-    }
-    }
-}
-
-@Composable
-private fun Quadrant(
-    index: Int,
-    tasks: List<TaskWithDetails>,
-    config: MatrixConfig,
-    modifier: Modifier,
-    open: (TaskWithDetails) -> Unit,
-    complete: (TaskEntity) -> Unit,
-    add: () -> Unit,
-) {
-    val color = quadrantColors[index]
-    val locale = LocalConfiguration.current.locales[0]
-    Surface(
-        modifier.testTag("quadrant-$index"),
-        shape = RoundedCornerShape(config.cornerRadius.dp),
-    ) {
-        Column {
-            Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                val titlePadding = if (config.cornerRadius > 20f) 12.dp else 6.dp
-                val title = stringResource(quadrantLabels[index])
-                val titleStyle = MaterialTheme.typography.labelMedium.copy(fontSize = 10.5f.sp * LocalTextScale.current, lineHeight = 13.sp * LocalTextScale.current)
-                BasicText(title,
-                    Modifier.fillMaxWidth().padding(start = titlePadding, end = titlePadding, top = 7.dp).testTag("quadrant-title-$index"),
-                    style = titleStyle.copy(color = color), maxLines = 1, softWrap = false,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 9.sp * LocalTextScale.current,
-                        maxFontSize = 10.5f.sp * LocalTextScale.current, stepSize = .1f.sp))
-                Text(stringResource(R.string.matrix_count, tasks.size),
-                    Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 6.dp),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp * LocalTextScale.current, lineHeight = 11.sp * LocalTextScale.current),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Box(Modifier.align(Alignment.BottomEnd).size(48.dp).clickable(onClick = add)
-                    .testTag("quadrant-add-$index"), contentAlignment = Alignment.BottomEnd) {
-                    PixIcon(PixSymbol.PLUS, stringResource(R.string.add_task),
-                        modifier = Modifier.padding(6.dp).size(16.dp), tint = color)
-                }
-            }
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 4.dp)) {
-                if (tasks.isEmpty())
-                    item {
-                        Text(
-                            stringResource(R.string.matrix_empty),
-                            Modifier.padding(6.dp),
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5f.sp * LocalTextScale.current),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                items(tasks, key = { it.task.id }) { detail ->
-                    val t = detail.task
-                    val completedLabel = stringResource(R.string.completed_description, t.title)
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .clickable { open(detail) }
-                            .testTag("matrix-task-${t.id}"),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Box(Modifier.size(48.dp).toggleable(value = t.isCompleted, role = Role.Checkbox, onValueChange = { complete(t) })
-                            .semantics { contentDescription = completedLabel }, contentAlignment = Alignment.Center) {
-                            Canvas(Modifier.size(15.dp)) {
-                                drawRoundRect(color, cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = Stroke(1.5.dp.toPx()))
-                                if (t.isCompleted) {
-                                    drawLine(color, Offset(size.width * .2f, size.height * .5f), Offset(size.width * .43f, size.height * .73f), 1.8.dp.toPx())
-                                    drawLine(color, Offset(size.width * .43f, size.height * .73f), Offset(size.width * .82f, size.height * .25f), 1.8.dp.toPx())
-                                }
-                            }
-                        }
-                        Column(Modifier.weight(1f).padding(top = 5.dp, end = 6.dp, bottom = 4.dp)) {
-                            Text(
-                                t.title,
-                                style =
-                                    MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 10.5f.sp * com.example.pix.ui.theme.LocalTextScale.current,
-                                        lineHeight = 13.sp * com.example.pix.ui.theme.LocalTextScale.current,
-                                    ),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            t.dueDay?.let {
-                                Text(
-                                    LocalDate.ofEpochDay(it)
-                                        .format(DateTimeFormatter.ofPattern("d MMM", locale)),
-                                    style =
-                                        MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 9.sp * com.example.pix.ui.theme.LocalTextScale.current,
-                                            lineHeight = 11.sp * com.example.pix.ui.theme.LocalTextScale.current,
-                                        ),
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            if (t.seriesId != null)
-                                PixIcon(
-                                    PixSymbol.REPEAT,
-                                    stringResource(R.string.recurrence),
-                                    modifier = Modifier.size(12.dp),
-                                )
-                        }
-                    }
+                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(4) { index -> item(key = index) { cell(index, Modifier.fillMaxWidth(), false) } }
                 }
             }
         }
     }
 }
 
+@Composable
+private fun Quadrant(
+    index: Int, tasks: List<TaskWithDetails>, today: LocalDate, config: MatrixConfig,
+    modifier: Modifier, bounded: Boolean, open: (TaskWithDetails) -> Unit,
+    complete: (TaskEntity) -> Unit, add: () -> Unit,
+) {
+    val color = quadrantColors[index]
+    val scale = LocalTextScale.current
+    val locale = LocalConfiguration.current.locales[0]
+    val numerals = listOf("I", "II", "III", "IV")
+    // Keep the same neutral surface in dark mode as the supplied reference.
+    val dark = MaterialTheme.colorScheme.background.luminance() < .3f
+    val surface = if (dark) Color(0xFF1E1E1E) else MaterialTheme.colorScheme.surfaceContainer
+    Surface(modifier.testTag("quadrant-$index"), shape = RoundedCornerShape(config.cornerRadius.dp), color = surface) {
+        Column {
+            Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 8.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(17.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
+                    Text(numerals[index], color = surface, fontSize = 12.sp, lineHeight = 14.sp)
+                }
+                Spacer(Modifier.width(4.dp))
+                Text(matrixTitle(config, index), Modifier.weight(1f).testTag("quadrant-title-$index"),
+                    color = color, fontSize = 12.sp * scale, lineHeight = 16.sp * scale,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            @Composable fun taskRow(detail: TaskWithDetails) {
+                val task = detail.task
+                val checkboxColor = if (index == 3) MaterialTheme.colorScheme.outline else color
+                val completedLabel = stringResource(R.string.completed_description, task.title)
+                Row(Modifier.fillMaxWidth().heightIn(min = 38.dp)
+                    .clickable { open(detail) }.semantics {
+                        customActions = listOf(CustomAccessibilityAction(completedLabel) { complete(task); true })
+                    }.testTag("matrix-task-${task.id}")
+                    .padding(start = 8.dp, end = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.Top) {
+                    Box(Modifier.width(25.dp).height(28.dp)
+                        .toggleable(task.isCompleted, role = Role.Checkbox, onValueChange = { complete(task) })
+                        .semantics { contentDescription = completedLabel }, contentAlignment = Alignment.TopCenter) {
+                        Canvas(Modifier.padding(top = 2.dp).size(16.dp)) {
+                            drawRoundRect(checkboxColor, cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()), style = Stroke(1.4.dp.toPx()))
+                            if (task.isCompleted) {
+                                drawLine(checkboxColor, Offset(size.width * .2f, size.height * .5f), Offset(size.width * .43f, size.height * .73f), 1.8.dp.toPx())
+                                drawLine(checkboxColor, Offset(size.width * .43f, size.height * .73f), Offset(size.width * .82f, size.height * .25f), 1.8.dp.toPx())
+                            }
+                        }
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(task.title, fontSize = 14.sp * scale, lineHeight = 17.sp * scale, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        TaskTiming.lastDay(task)?.let { day ->
+                            val date = LocalDate.ofEpochDay(day)
+                            Text(date.format(DateTimeFormatter.ofPattern(if (date.year == today.year) "d MMM" else "d MMM yyyy", locale)),
+                                fontSize = 10.sp * scale, lineHeight = 13.sp * scale,
+                                color = if (date < today) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.testTag("matrix-date-${task.id}"))
+                        }
+                    }
+                }
+            }
+            if (bounded) LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 8.dp)) {
+                items(tasks, key = { it.task.id }) { taskRow(it) }
+            } else tasks.forEach { key(it.task.id) { taskRow(it) } }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatrixOptions(config: MatrixConfig, save: (MatrixConfig) -> Unit, dismiss: () -> Unit) {
+fun MatrixOptions(config: MatrixConfig, save: (MatrixConfig) -> Unit, dismiss: () -> Unit, editCards: () -> Unit = {}) {
     var draft by remember { mutableStateOf(config) }
     ModalBottomSheet(
         onDismissRequest = dismiss,
@@ -251,6 +167,11 @@ fun MatrixOptions(config: MatrixConfig, save: (MatrixConfig) -> Unit, dismiss: (
                 stringResource(R.string.matrix_options),
                 style = MaterialTheme.typography.titleLarge,
             )
+            OutlinedButton(onClick = { save(draft); editCards() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.matrix_edit_cards)) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.matrix_hide_children), Modifier.weight(1f))
+                Switch(draft.hideChildren, { draft = draft.copy(hideChildren = it) }, Modifier.testTag("matrix-hide-children"))
+            }
             Text(stringResource(R.string.matrix_layout))
             ChoiceRow(
                 listOf(

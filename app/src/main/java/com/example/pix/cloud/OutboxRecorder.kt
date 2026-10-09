@@ -22,6 +22,11 @@ class OutboxRecorder(private val db: PixDatabase) {
         val series: Map<String, RecurringSeriesEntity>,
         val links: Set<String>,
         val images: Map<String, TaskImage>,
+        val habitGroups: Map<String, HabitGroupEntity> = emptyMap(),
+        val habits: Map<String, HabitEntity> = emptyMap(),
+        val habitRules: Map<String, HabitRuleEntity> = emptyMap(),
+        val habitLogs: Map<String, HabitLogEntity> = emptyMap(),
+
     )
 
     /**
@@ -36,7 +41,11 @@ class OutboxRecorder(private val db: PixDatabase) {
             tasks = dao.syncTasks().associateBy { it.id },
             series = dao.syncSeries().associateBy { it.id },
             links = dao.tagLinks().map { linkId(it.taskId, it.tagId) }.toSet(),
-            images = dao.syncImages().associateBy { it.id },
+            habitGroups = db.habitDao().groups().associateBy { it.id },
+            habits = db.habitDao().habits().associateBy { it.id },
+            habitRules = db.habitDao().rules().associateBy { it.id },
+            habitLogs = db.habitDao().logs().associateBy { it.id },
+            images = emptyMap(), // Images and their device-local paths never enter cloud payloads.
         )
 
     suspend fun record(before: Snapshot) {
@@ -45,6 +54,11 @@ class OutboxRecorder(private val db: PixDatabase) {
         diff(before.tags, after.tags, "tags") { SyncCodec.tag(it).toString() }
         diff(before.tasks, after.tasks, "tasks") { SyncCodec.task(it).toString() }
         diff(before.series, after.series, "recurring_series") { SyncCodec.series(it).toString() }
+
+        diff(before.habitGroups, after.habitGroups, "habit_groups") { HabitCodec.habitGroup(it).toString() }
+        diff(before.habits, after.habits, "habits") { HabitCodec.habit(it).toString() }
+        diff(before.habitRules, after.habitRules, "habit_rules") { HabitCodec.habitRule(it).toString() }
+        diff(before.habitLogs, after.habitLogs, "habit_logs") { HabitCodec.habitLog(it).toString() }
 
         val now = System.currentTimeMillis()
         (after.links - before.links).forEach { id ->
@@ -60,7 +74,7 @@ class OutboxRecorder(private val db: PixDatabase) {
             )
         }
         (before.links - after.links).forEach { enqueue("task_tags", it, DELETE, "{}") }
-        diff(before.images, after.images, "task_images") { SyncCodec.image(it).toString() }
+
     }
 
     suspend fun enqueueAll() {

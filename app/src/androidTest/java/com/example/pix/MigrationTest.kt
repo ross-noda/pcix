@@ -22,7 +22,26 @@ class MigrationTest {
             PixDatabase.MIGRATION_6_7,
             PixDatabase.MIGRATION_7_8,
             PixDatabase.MIGRATION_8_9,
+            PixDatabase.MIGRATION_9_10,
+            PixDatabase.MIGRATION_10_11,
+            PixDatabase.MIGRATION_11_12,
         )
+
+    @Test fun versionNinePreservesCalendarSelectionsAndPendingLocalImages() {
+        val name = "migration-v9-colors-${System.nanoTime()}.db"
+        try {
+            helper.createDatabase(name, 9).use { db ->
+                db.execSQL("INSERT INTO google_calendar_accounts VALUES('a','a@example.test')")
+                db.execSQL("INSERT INTO google_calendars(accountId,id,summary,colorArgb,timeZone,enabled,accessRole) VALUES('a','c','Calendar',123,NULL,0,'reader')")
+                db.execSQL("INSERT INTO sync_outbox(id,entityType,entityId,operation,payload,createdAt,attemptCount,lastAttemptAt) VALUES('legacy','task_images','image','UPSERT','{}',1,0,NULL)")
+            }
+            helper.runMigrationsAndValidate(name, 10, true, PixDatabase.MIGRATION_9_10).use { db ->
+                assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM google_calendars WHERE colorArgb=123 AND enabled=0 AND localColorArgb IS NULL"))
+                assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM sync_outbox WHERE id='legacy'"))
+                assertNoForeignKeyViolations(db)
+            }
+        } finally { instrumentation.targetContext.deleteDatabase(name) }
+    }
 
     @Test fun versionOneDataSurvivesMigration() = verifyMigration(1)
 
@@ -116,7 +135,7 @@ class MigrationTest {
         try {
             helper.createDatabase(name, version).use { db -> seedLegacyData(db, version) }
 
-            helper.runMigrationsAndValidate(name, 9, true, *migrations).use { db ->
+            helper.runMigrationsAndValidate(name, 10, true, *migrations).use { db ->
                 assertCoreData(db, version)
                 assertVersionSpecificData(db, version)
                 assertVersionEightInfrastructure(db)

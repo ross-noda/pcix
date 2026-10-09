@@ -13,6 +13,7 @@ data class TaskFilter(
     val search: String = "",
     val showCompleted: Boolean = false,
     val manual: Boolean = false,
+    val rootsOnly: Boolean = false,
 )
 
 class TaskRepository(
@@ -52,6 +53,7 @@ class TaskRepository(
             TaskRules.searchPattern(filter.search),
             filter.showCompleted,
             filter.manual,
+            filter.rootsOnly,
         )
 
     fun day(day: Long) = dao.observeDay(day)
@@ -121,6 +123,30 @@ class TaskRepository(
             dao.complete(id, completed, if (completed) now else null, now)
             if (completed) recurrence.advance(old)
         }
+    }
+
+    suspend fun completeWidgetChild(parentId: String, childId: String, completed: Boolean, guard: () -> Boolean) = mutate {
+        check(guard()) { "Stale widget account or configuration" }
+        val parent = dao.task(parentId) ?: return@mutate
+        val child = dao.task(childId) ?: return@mutate
+        if (parent.isSkipped || parent.isTemplate || child.parentTaskId != parentId) return@mutate
+        complete(childId, completed)
+    }
+
+    /** Widget reads share the account transition lock, preventing cross-account snapshots. */
+    suspend fun widgetDetails(id: String, guard: () -> Boolean): TaskWithDetails? =
+        accountMutex.withLock { if (guard()) dao.details(id) else null }
+
+    /** Compare the rendered notes before editing so stale taps cannot change another row. */
+    suspend fun setChecklistItem(id: String, notesRevision: String, index: Int, checked: Boolean, guard: () -> Boolean = { true }) = mutate {
+        check(guard()) { "Stale widget account or configuration" }
+        val detail = dao.details(id) ?: return@mutate
+        if (detail.task.isTemplate || detail.task.isSkipped || com.example.pix.domain.DescriptionText.revision(detail.task.notes) != notesRevision) return@mutate
+        val rows = com.example.pix.domain.DescriptionText.items(detail.task.notes).toMutableList()
+        val row = rows.getOrNull(index) ?: return@mutate
+        if (row.checked == null || row.checked == checked) return@mutate
+        rows[index] = row.copy(checked = checked)
+        edit(detail.task.copy(notes = com.example.pix.domain.DescriptionText.encode(rows)), detail.tags.map { it.id }.toSet())
     }
 
     suspend fun delete(id: String, scope: RecurrenceScope = RecurrenceScope.ONLY_THIS) {

@@ -21,6 +21,7 @@ playAuth = "21.4.0"
 glance = "1.2.0"
 
 [libraries]
+androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "work" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }

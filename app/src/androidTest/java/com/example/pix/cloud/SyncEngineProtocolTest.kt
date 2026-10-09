@@ -21,6 +21,44 @@ class SyncEngineProtocolTest {
         databases.clear()
     }
 
+    @Test fun twoDevicesPreserveParentChildTagsRecurrenceAndExcludeImages() = runBlocking {
+        val server = FakeServer()
+        val a = newDb(); val b = newDb()
+        val repoA = TaskRepository(a); val repoB = TaskRepository(b)
+        val parent = task("full-parent", "Parent").copy(dueDay = 24000)
+        val child = task("full-child", "Child").copy(parentTaskId = parent.id)
+        val tag = repoA.saveTag("Shared tag", 2)
+        repoA.create(parent, setOf(tag)); repoA.create(child)
+        val template = parent.copy(id = "full-template", isTemplate = true)
+        val series = RecurringSeriesEntity(id = "full-series", rule = "FREQ=DAILY", anchorDay = 24000, templateTaskId = template.id)
+        a.tracked {
+            a.dao().insertTask(template)
+            a.dao().insertSeries(series)
+            a.dao().attachSeries(parent.id, series.id, 24000)
+        }
+        repoA.addImage(TaskImage(id = "local-image", taskId = parent.id, fileName = "local.jpg"))
+        val syncA = SyncEngine(a, authenticatedAuth(), server) {}
+        val syncB = SyncEngine(b, authenticatedAuth(), server) {}
+        assertTrue(syncA.synchronize()); assertTrue(syncB.synchronize())
+        assertEquals(parent.id, b.dao().task(child.id)!!.parentTaskId)
+        assertEquals(series, b.dao().series(series.id))
+        assertEquals(setOf(tag), b.dao().tagIds(parent.id).toSet())
+        assertTrue(b.dao().images(parent.id).isEmpty())
+        assertFalse(server.pushOrder.any { it.startsWith("task_images:") })
+        repoB.edit(b.dao().task(child.id)!!.copy(title = "Edited child"), emptySet())
+        assertTrue(syncB.synchronize()); assertTrue(syncA.synchronize())
+        assertEquals("Edited child", a.dao().task(child.id)!!.title)
+        repoB.complete(child.id, true)
+        repoB.complete(parent.id, true)
+        assertTrue(syncB.synchronize()); assertTrue(syncA.synchronize())
+        assertTrue(a.dao().task(child.id)!!.isCompleted)
+        assertTrue(a.dao().task(parent.id)!!.isCompleted)
+        assertNotNull(a.dao().occurrence(series.id, 24001))
+        server.seedUpsert("task_images", "remote-image", SyncCodec.image(TaskImage(id = "remote-image", taskId = parent.id, fileName = "missing.jpg")))
+        assertTrue(syncB.synchronize())
+        assertTrue(b.dao().images(parent.id).isEmpty())
+    }
+
     @Test fun stoppedWorkerKeepsOutboxAndDoesNotLeaveSyncingStatus() = runBlocking {
         val db = newDb()
         TaskRepository(db).create(task("stop", "Pending"))

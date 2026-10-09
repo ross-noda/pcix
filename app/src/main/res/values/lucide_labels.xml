@@ -1,0 +1,1868 @@
+<resources>
+<string name="lucide_a_arrow_down" translatable="false">A arrow down</string>
+<string name="lucide_a_arrow_up" translatable="false">A arrow up</string>
+<string name="lucide_a_large_small" translatable="false">A large small</string>
+<string name="lucide_accessibility" translatable="false">Accessibility</string>
+<string name="lucide_activity" translatable="false">Activity</string>
+<string name="lucide_ad" translatable="false">Ad</string>
+<string name="lucide_air_vent" translatable="false">Air vent</string>
+<string name="lucide_airplay" translatable="false">Airplay</string>
+<string name="lucide_alarm_clock_check" translatable="false">Alarm clock check</string>
+<string name="lucide_alarm_clock_minus" translatable="false">Alarm clock minus</string>
+<string name="lucide_alarm_clock_off" translatable="false">Alarm clock off</string>
+<string name="lucide_alarm_clock_plus" translatable="false">Alarm clock plus</string>
+<string name="lucide_alarm_clock" translatable="false">Alarm clock</string>
+<string name="lucide_alarm_smoke" translatable="false">Alarm smoke</string>
+<string name="lucide_align_center_horizontal" translatable="false">Align center horizontal</string>
+<string name="lucide_align_center_vertical" translatable="false">Align center vertical</string>
+<string name="lucide_align_end_horizontal" translatable="false">Align end horizontal</string>
+<string name="lucide_align_end_vertical" translatable="false">Align end vertical</string>
+<string name="lucide_align_horizontal_distribute_center" translatable="false">Align horizontal distribute center</string>
+<string name="lucide_align_horizontal_distribute_end" translatable="false">Align horizontal distribute end</string>
+<string name="lucide_align_horizontal_distribute_start" translatable="false">Align horizontal distribute start</string>
+<string name="lucide_align_horizontal_justify_center" translatable="false">Align horizontal justify center</string>
+<string name="lucide_align_horizontal_justify_end" translatable="false">Align horizontal justify end</string>
+<string name="lucide_align_horizontal_justify_start" translatable="false">Align horizontal justify start</string>
+<string name="lucide_align_horizontal_space_around" translatable="false">Align horizontal space around</string>
+<string name="lucide_align_horizontal_space_between" translatable="false">Align horizontal space between</string>
+<string name="lucide_align_start_horizontal" translatable="false">Align start horizontal</string>
+<string name="lucide_align_start_vertical" translatable="false">Align start vertical</string>
+<string name="lucide_align_vertical_distribute_center" translatable="false">Align vertical distribute center</string>
+<string name="lucide_align_vertical_distribute_end" translatable="false">Align vertical distribute end</string>
+<string name="lucide_align_vertical_distribute_start" translatable="false">Align vertical distribute start</string>
+<string name="lucide_align_vertical_justify_center" translatable="false">Align vertical justify center</string>
+<string name="lucide_align_vertical_justify_end" translatable="false">Align vertical justify end</string>
+<string name="lucide_align_vertical_justify_start" translatable="false">Align vertical justify start</string>
+<string name="lucide_align_vertical_space_around" translatable="false">Align vertical space around</string>
+<string name="lucide_align_vertical_space_between" translatable="false">Align vertical space between</string>
+<string name="lucide_ambulance" translatable="false">Ambulance</string>
+<string name="lucide_ampersand" translatable="false">Ampersand</string>
+<string name="lucide_ampersands" translatable="false">Ampersands</string>
+<string name="lucide_amphora" translatable="false">Amphora</string>
+<string name="lucide_anchor" translatable="false">Anchor</string>
+<string name="lucide_angle" translatable="false">Angle</string>
+<string name="lucide_antenna" translatable="false">Antenna</string>
+<string name="lucide_anvil" translatable="false">Anvil</string>
+<string name="lucide_aperture" translatable="false">Aperture</string>
+<string name="lucide_app_window_mac" translatable="false">App window mac</string>
+<string name="lucide_app_window" translatable="false">App window</string>
+<string name="lucide_apple" translatable="false">Apple</string>
+<string name="lucide_archive_restore" translatable="false">Archive restore</string>
+<string name="lucide_archive_x" translatable="false">Archive x</string>
+<string name="lucide_archive" translatable="false">Archive</string>
+<string name="lucide_armchair" translatable="false">Armchair</string>
+<string name="lucide_armenian_dram" translatable="false">Armenian dram</string>
+<string name="lucide_arrow_big_down_dash" translatable="false">Arrow big down dash</string>
+<string name="lucide_arrow_big_down" translatable="false">Arrow big down</string>
+<string name="lucide_arrow_big_left_dash" translatable="false">Arrow big left dash</string>
+<string name="lucide_arrow_big_left" translatable="false">Arrow big left</string>
+<string name="lucide_arrow_big_right_dash" translatable="false">Arrow big right dash</string>
+<string name="lucide_arrow_big_right" translatable="false">Arrow big right</string>
+<string name="lucide_arrow_big_up_dash" translatable="false">Arrow big up dash</string>
+<string name="lucide_arrow_big_up" translatable="false">Arrow big up</string>
+<string name="lucide_arrow_down_0_1" translatable="false">Arrow down 0 1</string>
+<string name="lucide_arrow_down_1_0" translatable="false">Arrow down 1 0</string>
+<string name="lucide_arrow_down_a_z" translatable="false">Arrow down a z</string>
+<string name="lucide_arrow_down_from_line" translatable="false">Arrow down from line</string>
+<string name="lucide_arrow_down_left" translatable="false">Arrow down left</string>
+<string name="lucide_arrow_down_narrow_wide" translatable="false">Arrow down narrow wide</string>
+<string name="lucide_arrow_down_right" translatable="false">Arrow down right</string>
+<string name="lucide_arrow_down_to_dot" translatable="false">Arrow down to dot</string>
+<string name="lucide_arrow_down_to_line" translatable="false">Arrow down to line</string>
+<string name="lucide_arrow_down_up" translatable="false">Arrow down up</string>
+<string name="lucide_arrow_down_wide_narrow" translatable="false">Arrow down wide narrow</string>
+<string name="lucide_arrow_down_z_a" translatable="false">Arrow down z a</string>
+<string name="lucide_arrow_down" translatable="false">Arrow down</string>
+<string name="lucide_arrow_left_from_line" translatable="false">Arrow left from line</string>
+<string name="lucide_arrow_left_right" translatable="false">Arrow left right</string>
+<string name="lucide_arrow_left_to_line" translatable="false">Arrow left to line</string>
+<string name="lucide_arrow_left" translatable="false">Arrow left</string>
+<string name="lucide_arrow_right_from_line" translatable="false">Arrow right from line</string>
+<string name="lucide_arrow_right_left" translatable="false">Arrow right left</string>
+<string name="lucide_arrow_right_to_line" translatable="false">Arrow right to line</string>
+<string name="lucide_arrow_right" translatable="false">Arrow right</string>
+<string name="lucide_arrow_up_0_1" translatable="false">Arrow up 0 1</string>
+<string name="lucide_arrow_up_1_0" translatable="false">Arrow up 1 0</string>
+<string name="lucide_arrow_up_a_z" translatable="false">Arrow up a z</string>
+<string name="lucide_arrow_up_down" translatable="false">Arrow up down</string>
+<string name="lucide_arrow_up_from_dot" translatable="false">Arrow up from dot</string>
+<string name="lucide_arrow_up_from_line" translatable="false">Arrow up from line</string>
+<string name="lucide_arrow_up_left" translatable="false">Arrow up left</string>
+<string name="lucide_arrow_up_narrow_wide" translatable="false">Arrow up narrow wide</string>
+<string name="lucide_arrow_up_right" translatable="false">Arrow up right</string>
+<string name="lucide_arrow_up_to_line" translatable="false">Arrow up to line</string>
+<string name="lucide_arrow_up_wide_narrow" translatable="false">Arrow up wide narrow</string>
+<string name="lucide_arrow_up_z_a" translatable="false">Arrow up z a</string>
+<string name="lucide_arrow_up" translatable="false">Arrow up</string>
+<string name="lucide_arrows_up_from_line" translatable="false">Arrows up from line</string>
+<string name="lucide_asterisk" translatable="false">Asterisk</string>
+<string name="lucide_astroid" translatable="false">Astroid</string>
+<string name="lucide_at_sign" translatable="false">At sign</string>
+<string name="lucide_atom" translatable="false">Atom</string>
+<string name="lucide_audio_lines_off" translatable="false">Audio lines off</string>
+<string name="lucide_audio_lines_x" translatable="false">Audio lines x</string>
+<string name="lucide_audio_lines" translatable="false">Audio lines</string>
+<string name="lucide_audio_waveform" translatable="false">Audio waveform</string>
+<string name="lucide_award" translatable="false">Award</string>
+<string name="lucide_axe" translatable="false">Axe</string>
+<string name="lucide_axis_3d" translatable="false">Axis 3d</string>
+<string name="lucide_baby" translatable="false">Baby</string>
+<string name="lucide_backpack" translatable="false">Backpack</string>
+<string name="lucide_badge_alert" translatable="false">Badge alert</string>
+<string name="lucide_badge_cent" translatable="false">Badge cent</string>
+<string name="lucide_badge_check" translatable="false">Badge check</string>
+<string name="lucide_badge_dollar_sign" translatable="false">Badge dollar sign</string>
+<string name="lucide_badge_euro" translatable="false">Badge euro</string>
+<string name="lucide_badge_indian_rupee" translatable="false">Badge indian rupee</string>
+<string name="lucide_badge_info" translatable="false">Badge info</string>
+<string name="lucide_badge_japanese_yen" translatable="false">Badge japanese yen</string>
+<string name="lucide_badge_minus" translatable="false">Badge minus</string>
+<string name="lucide_badge_percent" translatable="false">Badge percent</string>
+<string name="lucide_badge_plus" translatable="false">Badge plus</string>
+<string name="lucide_badge_pound_sterling" translatable="false">Badge pound sterling</string>
+<string name="lucide_badge_question_mark" translatable="false">Badge question mark</string>
+<string name="lucide_badge_russian_ruble" translatable="false">Badge russian ruble</string>
+<string name="lucide_badge_swiss_franc" translatable="false">Badge swiss franc</string>
+<string name="lucide_badge_turkish_lira" translatable="false">Badge turkish lira</string>
+<string name="lucide_badge_x" translatable="false">Badge x</string>
+<string name="lucide_badge" translatable="false">Badge</string>
+<string name="lucide_baggage_claim" translatable="false">Baggage claim</string>
+<string name="lucide_balloon" translatable="false">Balloon</string>
+<string name="lucide_ban" translatable="false">Ban</string>
+<string name="lucide_banana" translatable="false">Banana</string>
+<string name="lucide_bandage" translatable="false">Bandage</string>
+<string name="lucide_bangladeshi_taka" translatable="false">Bangladeshi taka</string>
+<string name="lucide_banknote_arrow_down" translatable="false">Banknote arrow down</string>
+<string name="lucide_banknote_arrow_up" translatable="false">Banknote arrow up</string>
+<string name="lucide_banknote_check" translatable="false">Banknote check</string>
+<string name="lucide_banknote_x" translatable="false">Banknote x</string>
+<string name="lucide_banknote" translatable="false">Banknote</string>
+<string name="lucide_barcode" translatable="false">Barcode</string>
+<string name="lucide_barrel" translatable="false">Barrel</string>
+<string name="lucide_baseline" translatable="false">Baseline</string>
+<string name="lucide_bath" translatable="false">Bath</string>
+<string name="lucide_battery_charging" translatable="false">Battery charging</string>
+<string name="lucide_battery_full" translatable="false">Battery full</string>
+<string name="lucide_battery_low" translatable="false">Battery low</string>
+<string name="lucide_battery_medium" translatable="false">Battery medium</string>
+<string name="lucide_battery_plus" translatable="false">Battery plus</string>
+<string name="lucide_battery_warning" translatable="false">Battery warning</string>
+<string name="lucide_battery" translatable="false">Battery</string>
+<string name="lucide_beaker" translatable="false">Beaker</string>
+<string name="lucide_bean_off" translatable="false">Bean off</string>
+<string name="lucide_bean" translatable="false">Bean</string>
+<string name="lucide_bed_double" translatable="false">Bed double</string>
+<string name="lucide_bed_single" translatable="false">Bed single</string>
+<string name="lucide_bed" translatable="false">Bed</string>
+<string name="lucide_beef_off" translatable="false">Beef off</string>
+<string name="lucide_beef" translatable="false">Beef</string>
+<string name="lucide_beer_off" translatable="false">Beer off</string>
+<string name="lucide_beer" translatable="false">Beer</string>
+<string name="lucide_bell_check" translatable="false">Bell check</string>
+<string name="lucide_bell_dot" translatable="false">Bell dot</string>
+<string name="lucide_bell_electric" translatable="false">Bell electric</string>
+<string name="lucide_bell_minus" translatable="false">Bell minus</string>
+<string name="lucide_bell_off" translatable="false">Bell off</string>
+<string name="lucide_bell_plus" translatable="false">Bell plus</string>
+<string name="lucide_bell_ring" translatable="false">Bell ring</string>
+<string name="lucide_bell" translatable="false">Bell</string>
+<string name="lucide_between_horizontal_end" translatable="false">Between horizontal end</string>
+<string name="lucide_between_horizontal_start" translatable="false">Between horizontal start</string>
+<string name="lucide_between_vertical_end" translatable="false">Between vertical end</string>
+<string name="lucide_between_vertical_start" translatable="false">Between vertical start</string>
+<string name="lucide_biceps_flexed" translatable="false">Biceps flexed</string>
+<string name="lucide_bike" translatable="false">Bike</string>
+<string name="lucide_binary" translatable="false">Binary</string>
+<string name="lucide_binoculars" translatable="false">Binoculars</string>
+<string name="lucide_biohazard" translatable="false">Biohazard</string>
+<string name="lucide_bird" translatable="false">Bird</string>
+<string name="lucide_birdhouse" translatable="false">Birdhouse</string>
+<string name="lucide_bitcoin" translatable="false">Bitcoin</string>
+<string name="lucide_blend" translatable="false">Blend</string>
+<string name="lucide_blender" translatable="false">Blender</string>
+<string name="lucide_blinds" translatable="false">Blinds</string>
+<string name="lucide_blocks" translatable="false">Blocks</string>
+<string name="lucide_bluetooth_connected" translatable="false">Bluetooth connected</string>
+<string name="lucide_bluetooth_off" translatable="false">Bluetooth off</string>
+<string name="lucide_bluetooth_searching" translatable="false">Bluetooth searching</string>
+<string name="lucide_bluetooth" translatable="false">Bluetooth</string>
+<string name="lucide_bold" translatable="false">Bold</string>
+<string name="lucide_bolt" translatable="false">Bolt</string>
+<string name="lucide_bomb" translatable="false">Bomb</string>
+<string name="lucide_bone_fracture" translatable="false">Bone fracture</string>
+<string name="lucide_bone" translatable="false">Bone</string>
+<string name="lucide_book_a" translatable="false">Book a</string>
+<string name="lucide_book_alert" translatable="false">Book alert</string>
+<string name="lucide_book_audio" translatable="false">Book audio</string>
+<string name="lucide_book_bookmark" translatable="false">Book bookmark</string>
+<string name="lucide_book_check" translatable="false">Book check</string>
+<string name="lucide_book_copy" translatable="false">Book copy</string>
+<string name="lucide_book_dashed" translatable="false">Book dashed</string>
+<string name="lucide_book_down" translatable="false">Book down</string>
+<string name="lucide_book_headphones" translatable="false">Book headphones</string>
+<string name="lucide_book_heart" translatable="false">Book heart</string>
+<string name="lucide_book_image" translatable="false">Book image</string>
+<string name="lucide_book_key" translatable="false">Book key</string>
+<string name="lucide_book_lock" translatable="false">Book lock</string>
+<string name="lucide_book_minus" translatable="false">Book minus</string>
+<string name="lucide_book_open_check" translatable="false">Book open check</string>
+<string name="lucide_book_open_text" translatable="false">Book open text</string>
+<string name="lucide_book_open" translatable="false">Book open</string>
+<string name="lucide_book_plus" translatable="false">Book plus</string>
+<string name="lucide_book_search" translatable="false">Book search</string>
+<string name="lucide_book_text" translatable="false">Book text</string>
+<string name="lucide_book_type" translatable="false">Book type</string>
+<string name="lucide_book_up_2" translatable="false">Book up 2</string>
+<string name="lucide_book_up" translatable="false">Book up</string>
+<string name="lucide_book_user" translatable="false">Book user</string>
+<string name="lucide_book_x" translatable="false">Book x</string>
+<string name="lucide_book" translatable="false">Book</string>
+<string name="lucide_bookmark_check" translatable="false">Bookmark check</string>
+<string name="lucide_bookmark_minus" translatable="false">Bookmark minus</string>
+<string name="lucide_bookmark_off" translatable="false">Bookmark off</string>
+<string name="lucide_bookmark_plus" translatable="false">Bookmark plus</string>
+<string name="lucide_bookmark_x" translatable="false">Bookmark x</string>
+<string name="lucide_bookmark" translatable="false">Bookmark</string>
+<string name="lucide_boom_box" translatable="false">Boom box</string>
+<string name="lucide_bot_message_square" translatable="false">Bot message square</string>
+<string name="lucide_bot_off" translatable="false">Bot off</string>
+<string name="lucide_bot" translatable="false">Bot</string>
+<string name="lucide_bottle_wine" translatable="false">Bottle wine</string>
+<string name="lucide_bow_arrow" translatable="false">Bow arrow</string>
+<string name="lucide_box" translatable="false">Box</string>
+<string name="lucide_boxes" translatable="false">Boxes</string>
+<string name="lucide_braces" translatable="false">Braces</string>
+<string name="lucide_brackets" translatable="false">Brackets</string>
+<string name="lucide_brain_circuit" translatable="false">Brain circuit</string>
+<string name="lucide_brain_cog" translatable="false">Brain cog</string>
+<string name="lucide_brain" translatable="false">Brain</string>
+<string name="lucide_brick_wall_fire" translatable="false">Brick wall fire</string>
+<string name="lucide_brick_wall_shield" translatable="false">Brick wall shield</string>
+<string name="lucide_brick_wall" translatable="false">Brick wall</string>
+<string name="lucide_bridge" translatable="false">Bridge</string>
+<string name="lucide_briefcase_business" translatable="false">Briefcase business</string>
+<string name="lucide_briefcase_conveyor_belt" translatable="false">Briefcase conveyor belt</string>
+<string name="lucide_briefcase_medical" translatable="false">Briefcase medical</string>
+<string name="lucide_briefcase_plus" translatable="false">Briefcase plus</string>
+<string name="lucide_briefcase" translatable="false">Briefcase</string>
+<string name="lucide_bring_to_front" translatable="false">Bring to front</string>
+<string name="lucide_broccoli" translatable="false">Broccoli</string>
+<string name="lucide_broom_sparkles" translatable="false">Broom sparkles</string>
+<string name="lucide_broom" translatable="false">Broom</string>
+<string name="lucide_brush_cleaning" translatable="false">Brush cleaning</string>
+<string name="lucide_brush" translatable="false">Brush</string>
+<string name="lucide_bubbles" translatable="false">Bubbles</string>
+<string name="lucide_bug_off" translatable="false">Bug off</string>
+<string name="lucide_bug_play" translatable="false">Bug play</string>
+<string name="lucide_bug" translatable="false">Bug</string>
+<string name="lucide_building_complex_plus" translatable="false">Building complex plus</string>
+<string name="lucide_building_complex" translatable="false">Building complex</string>
+<string name="lucide_building" translatable="false">Building</string>
+<string name="lucide_bus_front" translatable="false">Bus front</string>
+<string name="lucide_bus" translatable="false">Bus</string>
+<string name="lucide_cable_car" translatable="false">Cable car</string>
+<string name="lucide_cable" translatable="false">Cable</string>
+<string name="lucide_cake_slice" translatable="false">Cake slice</string>
+<string name="lucide_cake" translatable="false">Cake</string>
+<string name="lucide_calculator" translatable="false">Calculator</string>
+<string name="lucide_calendar_1" translatable="false">Calendar 1</string>
+<string name="lucide_calendar_arrow_down" translatable="false">Calendar arrow down</string>
+<string name="lucide_calendar_arrow_up" translatable="false">Calendar arrow up</string>
+<string name="lucide_calendar_check_2" translatable="false">Calendar check 2</string>
+<string name="lucide_calendar_check" translatable="false">Calendar check</string>
+<string name="lucide_calendar_chevrons_right" translatable="false">Calendar chevrons right</string>
+<string name="lucide_calendar_clock" translatable="false">Calendar clock</string>
+<string name="lucide_calendar_cog" translatable="false">Calendar cog</string>
+<string name="lucide_calendar_days" translatable="false">Calendar days</string>
+<string name="lucide_calendar_fold" translatable="false">Calendar fold</string>
+<string name="lucide_calendar_heart" translatable="false">Calendar heart</string>
+<string name="lucide_calendar_minus_2" translatable="false">Calendar minus 2</string>
+<string name="lucide_calendar_minus" translatable="false">Calendar minus</string>
+<string name="lucide_calendar_off" translatable="false">Calendar off</string>
+<string name="lucide_calendar_plus_2" translatable="false">Calendar plus 2</string>
+<string name="lucide_calendar_plus" translatable="false">Calendar plus</string>
+<string name="lucide_calendar_range" translatable="false">Calendar range</string>
+<string name="lucide_calendar_search" translatable="false">Calendar search</string>
+<string name="lucide_calendar_sync" translatable="false">Calendar sync</string>
+<string name="lucide_calendar_x_2" translatable="false">Calendar x 2</string>
+<string name="lucide_calendar_x" translatable="false">Calendar x</string>
+<string name="lucide_calendar" translatable="false">Calendar</string>
+<string name="lucide_calendars" translatable="false">Calendars</string>
+<string name="lucide_camera_off" translatable="false">Camera off</string>
+<string name="lucide_camera" translatable="false">Camera</string>
+<string name="lucide_can_soda" translatable="false">Can soda</string>
+<string name="lucide_can" translatable="false">Can</string>
+<string name="lucide_candy_cane" translatable="false">Candy cane</string>
+<string name="lucide_candy_off" translatable="false">Candy off</string>
+<string name="lucide_candy" translatable="false">Candy</string>
+<string name="lucide_cannabis_off" translatable="false">Cannabis off</string>
+<string name="lucide_cannabis" translatable="false">Cannabis</string>
+<string name="lucide_captions_off" translatable="false">Captions off</string>
+<string name="lucide_captions" translatable="false">Captions</string>
+<string name="lucide_car_battery" translatable="false">Car battery</string>
+<string name="lucide_car_front" translatable="false">Car front</string>
+<string name="lucide_car_taxi_front" translatable="false">Car taxi front</string>
+<string name="lucide_car" translatable="false">Car</string>
+<string name="lucide_caravan" translatable="false">Caravan</string>
+<string name="lucide_card_sim" translatable="false">Card sim</string>
+<string name="lucide_carrot" translatable="false">Carrot</string>
+<string name="lucide_carton_off" translatable="false">Carton off</string>
+<string name="lucide_carton" translatable="false">Carton</string>
+<string name="lucide_case_lower" translatable="false">Case lower</string>
+<string name="lucide_case_sensitive" translatable="false">Case sensitive</string>
+<string name="lucide_case_upper" translatable="false">Case upper</string>
+<string name="lucide_cassette_tape" translatable="false">Cassette tape</string>
+<string name="lucide_cast" translatable="false">Cast</string>
+<string name="lucide_castle" translatable="false">Castle</string>
+<string name="lucide_cat" translatable="false">Cat</string>
+<string name="lucide_cctv_off" translatable="false">Cctv off</string>
+<string name="lucide_cctv" translatable="false">Cctv</string>
+<string name="lucide_chart_area" translatable="false">Chart area</string>
+<string name="lucide_chart_bar_big" translatable="false">Chart bar big</string>
+<string name="lucide_chart_bar_decreasing" translatable="false">Chart bar decreasing</string>
+<string name="lucide_chart_bar_increasing" translatable="false">Chart bar increasing</string>
+<string name="lucide_chart_bar_stacked" translatable="false">Chart bar stacked</string>
+<string name="lucide_chart_bar" translatable="false">Chart bar</string>
+<string name="lucide_chart_candlestick" translatable="false">Chart candlestick</string>
+<string name="lucide_chart_column_big" translatable="false">Chart column big</string>
+<string name="lucide_chart_column_decreasing" translatable="false">Chart column decreasing</string>
+<string name="lucide_chart_column_increasing" translatable="false">Chart column increasing</string>
+<string name="lucide_chart_column_stacked" translatable="false">Chart column stacked</string>
+<string name="lucide_chart_column" translatable="false">Chart column</string>
+<string name="lucide_chart_gantt" translatable="false">Chart gantt</string>
+<string name="lucide_chart_line" translatable="false">Chart line</string>
+<string name="lucide_chart_network" translatable="false">Chart network</string>
+<string name="lucide_chart_no_axes_column_decreasing" translatable="false">Chart no axes column decreasing</string>
+<string name="lucide_chart_no_axes_column_increasing" translatable="false">Chart no axes column increasing</string>
+<string name="lucide_chart_no_axes_column" translatable="false">Chart no axes column</string>
+<string name="lucide_chart_no_axes_combined" translatable="false">Chart no axes combined</string>
+<string name="lucide_chart_no_axes_gantt" translatable="false">Chart no axes gantt</string>
+<string name="lucide_chart_pie" translatable="false">Chart pie</string>
+<string name="lucide_chart_scatter" translatable="false">Chart scatter</string>
+<string name="lucide_chart_spline" translatable="false">Chart spline</string>
+<string name="lucide_check_check" translatable="false">Check check</string>
+<string name="lucide_check_line" translatable="false">Check line</string>
+<string name="lucide_check" translatable="false">Check</string>
+<string name="lucide_chef_hat" translatable="false">Chef hat</string>
+<string name="lucide_cherry" translatable="false">Cherry</string>
+<string name="lucide_chess_bishop" translatable="false">Chess bishop</string>
+<string name="lucide_chess_king" translatable="false">Chess king</string>
+<string name="lucide_chess_knight" translatable="false">Chess knight</string>
+<string name="lucide_chess_pawn" translatable="false">Chess pawn</string>
+<string name="lucide_chess_queen" translatable="false">Chess queen</string>
+<string name="lucide_chess_rook" translatable="false">Chess rook</string>
+<string name="lucide_chevron_down" translatable="false">Chevron down</string>
+<string name="lucide_chevron_first" translatable="false">Chevron first</string>
+<string name="lucide_chevron_last" translatable="false">Chevron last</string>
+<string name="lucide_chevron_left" translatable="false">Chevron left</string>
+<string name="lucide_chevron_right" translatable="false">Chevron right</string>
+<string name="lucide_chevron_up" translatable="false">Chevron up</string>
+<string name="lucide_chevrons_down_up" translatable="false">Chevrons down up</string>
+<string name="lucide_chevrons_down" translatable="false">Chevrons down</string>
+<string name="lucide_chevrons_left_right_ellipsis" translatable="false">Chevrons left right ellipsis</string>
+<string name="lucide_chevrons_left_right" translatable="false">Chevrons left right</string>
+<string name="lucide_chevrons_left" translatable="false">Chevrons left</string>
+<string name="lucide_chevrons_right_left" translatable="false">Chevrons right left</string>
+<string name="lucide_chevrons_right" translatable="false">Chevrons right</string>
+<string name="lucide_chevrons_up_down" translatable="false">Chevrons up down</string>
+<string name="lucide_chevrons_up" translatable="false">Chevrons up</string>
+<string name="lucide_church" translatable="false">Church</string>
+<string name="lucide_cigarette_off" translatable="false">Cigarette off</string>
+<string name="lucide_cigarette" translatable="false">Cigarette</string>
+<string name="lucide_circle_alert" translatable="false">Circle alert</string>
+<string name="lucide_circle_arrow_down" translatable="false">Circle arrow down</string>
+<string name="lucide_circle_arrow_left" translatable="false">Circle arrow left</string>
+<string name="lucide_circle_arrow_out_down_left" translatable="false">Circle arrow out down left</string>
+<string name="lucide_circle_arrow_out_down_right" translatable="false">Circle arrow out down right</string>
+<string name="lucide_circle_arrow_out_up_left" translatable="false">Circle arrow out up left</string>
+<string name="lucide_circle_arrow_out_up_right" translatable="false">Circle arrow out up right</string>
+<string name="lucide_circle_arrow_right" translatable="false">Circle arrow right</string>
+<string name="lucide_circle_arrow_up" translatable="false">Circle arrow up</string>
+<string name="lucide_circle_check_big" translatable="false">Circle check big</string>
+<string name="lucide_circle_check" translatable="false">Circle check</string>
+<string name="lucide_circle_chevron_down" translatable="false">Circle chevron down</string>
+<string name="lucide_circle_chevron_left" translatable="false">Circle chevron left</string>
+<string name="lucide_circle_chevron_right" translatable="false">Circle chevron right</string>
+<string name="lucide_circle_chevron_up" translatable="false">Circle chevron up</string>
+<string name="lucide_circle_dashed_check" translatable="false">Circle dashed check</string>
+<string name="lucide_circle_dashed" translatable="false">Circle dashed</string>
+<string name="lucide_circle_divide" translatable="false">Circle divide</string>
+<string name="lucide_circle_dollar_sign" translatable="false">Circle dollar sign</string>
+<string name="lucide_circle_dot_dashed" translatable="false">Circle dot dashed</string>
+<string name="lucide_circle_dot" translatable="false">Circle dot</string>
+<string name="lucide_circle_ellipsis" translatable="false">Circle ellipsis</string>
+<string name="lucide_circle_equal" translatable="false">Circle equal</string>
+<string name="lucide_circle_euro" translatable="false">Circle euro</string>
+<string name="lucide_circle_fading_arrow_up" translatable="false">Circle fading arrow up</string>
+<string name="lucide_circle_fading_plus" translatable="false">Circle fading plus</string>
+<string name="lucide_circle_gauge" translatable="false">Circle gauge</string>
+<string name="lucide_circle_minus" translatable="false">Circle minus</string>
+<string name="lucide_circle_off" translatable="false">Circle off</string>
+<string name="lucide_circle_parking_off" translatable="false">Circle parking off</string>
+<string name="lucide_circle_parking" translatable="false">Circle parking</string>
+<string name="lucide_circle_pause" translatable="false">Circle pause</string>
+<string name="lucide_circle_percent" translatable="false">Circle percent</string>
+<string name="lucide_circle_pile" translatable="false">Circle pile</string>
+<string name="lucide_circle_play" translatable="false">Circle play</string>
+<string name="lucide_circle_plus" translatable="false">Circle plus</string>
+<string name="lucide_circle_pound_sterling" translatable="false">Circle pound sterling</string>
+<string name="lucide_circle_power" translatable="false">Circle power</string>
+<string name="lucide_circle_question_mark" translatable="false">Circle question mark</string>
+<string name="lucide_circle_slash_2" translatable="false">Circle slash 2</string>
+<string name="lucide_circle_slash" translatable="false">Circle slash</string>
+<string name="lucide_circle_small" translatable="false">Circle small</string>
+<string name="lucide_circle_star" translatable="false">Circle star</string>
+<string name="lucide_circle_stop" translatable="false">Circle stop</string>
+<string name="lucide_circle_user_round" translatable="false">Circle user round</string>
+<string name="lucide_circle_user" translatable="false">Circle user</string>
+<string name="lucide_circle_x" translatable="false">Circle x</string>
+<string name="lucide_circle" translatable="false">Circle</string>
+<string name="lucide_circuit_board" translatable="false">Circuit board</string>
+<string name="lucide_citrus" translatable="false">Citrus</string>
+<string name="lucide_clapperboard" translatable="false">Clapperboard</string>
+<string name="lucide_clef_alto" translatable="false">Clef alto</string>
+<string name="lucide_clef_bass" translatable="false">Clef bass</string>
+<string name="lucide_clef_treble" translatable="false">Clef treble</string>
+<string name="lucide_clipboard_check" translatable="false">Clipboard check</string>
+<string name="lucide_clipboard_clock" translatable="false">Clipboard clock</string>
+<string name="lucide_clipboard_copy" translatable="false">Clipboard copy</string>
+<string name="lucide_clipboard_list" translatable="false">Clipboard list</string>
+<string name="lucide_clipboard_minus" translatable="false">Clipboard minus</string>
+<string name="lucide_clipboard_paste" translatable="false">Clipboard paste</string>
+<string name="lucide_clipboard_pen_line" translatable="false">Clipboard pen line</string>
+<string name="lucide_clipboard_pen" translatable="false">Clipboard pen</string>
+<string name="lucide_clipboard_plus" translatable="false">Clipboard plus</string>
+<string name="lucide_clipboard_type" translatable="false">Clipboard type</string>
+<string name="lucide_clipboard_x" translatable="false">Clipboard x</string>
+<string name="lucide_clipboard" translatable="false">Clipboard</string>
+<string name="lucide_clock_1" translatable="false">Clock 1</string>
+<string name="lucide_clock_10" translatable="false">Clock 10</string>
+<string name="lucide_clock_11" translatable="false">Clock 11</string>
+<string name="lucide_clock_12" translatable="false">Clock 12</string>
+<string name="lucide_clock_2" translatable="false">Clock 2</string>
+<string name="lucide_clock_3" translatable="false">Clock 3</string>
+<string name="lucide_clock_4" translatable="false">Clock 4</string>
+<string name="lucide_clock_5" translatable="false">Clock 5</string>
+<string name="lucide_clock_6" translatable="false">Clock 6</string>
+<string name="lucide_clock_7" translatable="false">Clock 7</string>
+<string name="lucide_clock_8" translatable="false">Clock 8</string>
+<string name="lucide_clock_9" translatable="false">Clock 9</string>
+<string name="lucide_clock_alert" translatable="false">Clock alert</string>
+<string name="lucide_clock_arrow_down" translatable="false">Clock arrow down</string>
+<string name="lucide_clock_arrow_left" translatable="false">Clock arrow left</string>
+<string name="lucide_clock_arrow_right" translatable="false">Clock arrow right</string>
+<string name="lucide_clock_arrow_up" translatable="false">Clock arrow up</string>
+<string name="lucide_clock_check" translatable="false">Clock check</string>
+<string name="lucide_clock_fading" translatable="false">Clock fading</string>
+<string name="lucide_clock_plus" translatable="false">Clock plus</string>
+<string name="lucide_clock" translatable="false">Clock</string>
+<string name="lucide_closed_caption" translatable="false">Closed caption</string>
+<string name="lucide_cloud_alert" translatable="false">Cloud alert</string>
+<string name="lucide_cloud_backup" translatable="false">Cloud backup</string>
+<string name="lucide_cloud_check" translatable="false">Cloud check</string>
+<string name="lucide_cloud_cog" translatable="false">Cloud cog</string>
+<string name="lucide_cloud_download" translatable="false">Cloud download</string>
+<string name="lucide_cloud_drizzle" translatable="false">Cloud drizzle</string>
+<string name="lucide_cloud_fog" translatable="false">Cloud fog</string>
+<string name="lucide_cloud_hail" translatable="false">Cloud hail</string>
+<string name="lucide_cloud_lightning" translatable="false">Cloud lightning</string>
+<string name="lucide_cloud_moon_rain" translatable="false">Cloud moon rain</string>
+<string name="lucide_cloud_moon" translatable="false">Cloud moon</string>
+<string name="lucide_cloud_off" translatable="false">Cloud off</string>
+<string name="lucide_cloud_rain_wind" translatable="false">Cloud rain wind</string>
+<string name="lucide_cloud_rain" translatable="false">Cloud rain</string>
+<string name="lucide_cloud_snow" translatable="false">Cloud snow</string>
+<string name="lucide_cloud_sun_rain" translatable="false">Cloud sun rain</string>
+<string name="lucide_cloud_sun" translatable="false">Cloud sun</string>
+<string name="lucide_cloud_sync" translatable="false">Cloud sync</string>
+<string name="lucide_cloud_upload" translatable="false">Cloud upload</string>
+<string name="lucide_cloud" translatable="false">Cloud</string>
+<string name="lucide_cloudy" translatable="false">Cloudy</string>
+<string name="lucide_clover" translatable="false">Clover</string>
+<string name="lucide_club" translatable="false">Club</string>
+<string name="lucide_code_xml" translatable="false">Code xml</string>
+<string name="lucide_code" translatable="false">Code</string>
+<string name="lucide_coffee" translatable="false">Coffee</string>
+<string name="lucide_cog" translatable="false">Cog</string>
+<string name="lucide_coins" translatable="false">Coins</string>
+<string name="lucide_columns_2" translatable="false">Columns 2</string>
+<string name="lucide_columns_3_cog" translatable="false">Columns 3 cog</string>
+<string name="lucide_columns_3" translatable="false">Columns 3</string>
+<string name="lucide_columns_4" translatable="false">Columns 4</string>
+<string name="lucide_combine" translatable="false">Combine</string>
+<string name="lucide_command" translatable="false">Command</string>
+<string name="lucide_compass" translatable="false">Compass</string>
+<string name="lucide_component" translatable="false">Component</string>
+<string name="lucide_computer" translatable="false">Computer</string>
+<string name="lucide_concierge_bell" translatable="false">Concierge bell</string>
+<string name="lucide_cone" translatable="false">Cone</string>
+<string name="lucide_construction" translatable="false">Construction</string>
+<string name="lucide_contact_round" translatable="false">Contact round</string>
+<string name="lucide_contact" translatable="false">Contact</string>
+<string name="lucide_container" translatable="false">Container</string>
+<string name="lucide_contrast" translatable="false">Contrast</string>
+<string name="lucide_cookie" translatable="false">Cookie</string>
+<string name="lucide_cooking_pot" translatable="false">Cooking pot</string>
+<string name="lucide_copy_check" translatable="false">Copy check</string>
+<string name="lucide_copy_minus" translatable="false">Copy minus</string>
+<string name="lucide_copy_plus" translatable="false">Copy plus</string>
+<string name="lucide_copy_slash" translatable="false">Copy slash</string>
+<string name="lucide_copy_x" translatable="false">Copy x</string>
+<string name="lucide_copy" translatable="false">Copy</string>
+<string name="lucide_copyleft" translatable="false">Copyleft</string>
+<string name="lucide_copyright" translatable="false">Copyright</string>
+<string name="lucide_corner_down_left" translatable="false">Corner down left</string>
+<string name="lucide_corner_down_right" translatable="false">Corner down right</string>
+<string name="lucide_corner_left_down" translatable="false">Corner left down</string>
+<string name="lucide_corner_left_up" translatable="false">Corner left up</string>
+<string name="lucide_corner_right_down" translatable="false">Corner right down</string>
+<string name="lucide_corner_right_up" translatable="false">Corner right up</string>
+<string name="lucide_corner_up_left" translatable="false">Corner up left</string>
+<string name="lucide_corner_up_right" translatable="false">Corner up right</string>
+<string name="lucide_cpu" translatable="false">Cpu</string>
+<string name="lucide_creative_commons" translatable="false">Creative commons</string>
+<string name="lucide_credit_card_check" translatable="false">Credit card check</string>
+<string name="lucide_credit_card_minus" translatable="false">Credit card minus</string>
+<string name="lucide_credit_card_plus" translatable="false">Credit card plus</string>
+<string name="lucide_credit_card_reader" translatable="false">Credit card reader</string>
+<string name="lucide_credit_card_x" translatable="false">Credit card x</string>
+<string name="lucide_credit_card" translatable="false">Credit card</string>
+<string name="lucide_croissant" translatable="false">Croissant</string>
+<string name="lucide_crop" translatable="false">Crop</string>
+<string name="lucide_cross" translatable="false">Cross</string>
+<string name="lucide_crosshair" translatable="false">Crosshair</string>
+<string name="lucide_crown" translatable="false">Crown</string>
+<string name="lucide_cuboid" translatable="false">Cuboid</string>
+<string name="lucide_cup_soda" translatable="false">Cup soda</string>
+<string name="lucide_cupcake" translatable="false">Cupcake</string>
+<string name="lucide_currency" translatable="false">Currency</string>
+<string name="lucide_cylinder" translatable="false">Cylinder</string>
+<string name="lucide_dam" translatable="false">Dam</string>
+<string name="lucide_database_arrow_down" translatable="false">Database arrow down</string>
+<string name="lucide_database_arrow_up" translatable="false">Database arrow up</string>
+<string name="lucide_database_backup" translatable="false">Database backup</string>
+<string name="lucide_database_check" translatable="false">Database check</string>
+<string name="lucide_database_minus" translatable="false">Database minus</string>
+<string name="lucide_database_plus" translatable="false">Database plus</string>
+<string name="lucide_database_search" translatable="false">Database search</string>
+<string name="lucide_database_x" translatable="false">Database x</string>
+<string name="lucide_database_zap" translatable="false">Database zap</string>
+<string name="lucide_database" translatable="false">Database</string>
+<string name="lucide_decimals_arrow_left" translatable="false">Decimals arrow left</string>
+<string name="lucide_decimals_arrow_right" translatable="false">Decimals arrow right</string>
+<string name="lucide_delete" translatable="false">Delete</string>
+<string name="lucide_dessert" translatable="false">Dessert</string>
+<string name="lucide_diameter" translatable="false">Diameter</string>
+<string name="lucide_diamond_minus" translatable="false">Diamond minus</string>
+<string name="lucide_diamond_percent" translatable="false">Diamond percent</string>
+<string name="lucide_diamond_plus" translatable="false">Diamond plus</string>
+<string name="lucide_diamond" translatable="false">Diamond</string>
+<string name="lucide_dice_1" translatable="false">Dice 1</string>
+<string name="lucide_dice_2" translatable="false">Dice 2</string>
+<string name="lucide_dice_3" translatable="false">Dice 3</string>
+<string name="lucide_dice_4" translatable="false">Dice 4</string>
+<string name="lucide_dice_5" translatable="false">Dice 5</string>
+<string name="lucide_dice_6" translatable="false">Dice 6</string>
+<string name="lucide_dices" translatable="false">Dices</string>
+<string name="lucide_diff" translatable="false">Diff</string>
+<string name="lucide_disc_2" translatable="false">Disc 2</string>
+<string name="lucide_disc_3" translatable="false">Disc 3</string>
+<string name="lucide_disc_album" translatable="false">Disc album</string>
+<string name="lucide_disc" translatable="false">Disc</string>
+<string name="lucide_divide" translatable="false">Divide</string>
+<string name="lucide_dna_off" translatable="false">Dna off</string>
+<string name="lucide_dna" translatable="false">Dna</string>
+<string name="lucide_dock" translatable="false">Dock</string>
+<string name="lucide_dog" translatable="false">Dog</string>
+<string name="lucide_dollar_sign" translatable="false">Dollar sign</string>
+<string name="lucide_dome" translatable="false">Dome</string>
+<string name="lucide_donut" translatable="false">Donut</string>
+<string name="lucide_door_closed_cog" translatable="false">Door closed cog</string>
+<string name="lucide_door_closed_locked" translatable="false">Door closed locked</string>
+<string name="lucide_door_closed_package" translatable="false">Door closed package</string>
+<string name="lucide_door_closed" translatable="false">Door closed</string>
+<string name="lucide_door_open" translatable="false">Door open</string>
+<string name="lucide_door_stairwell" translatable="false">Door stairwell</string>
+<string name="lucide_dot" translatable="false">Dot</string>
+<string name="lucide_download" translatable="false">Download</string>
+<string name="lucide_drafting_compass" translatable="false">Drafting compass</string>
+<string name="lucide_drama" translatable="false">Drama</string>
+<string name="lucide_drill" translatable="false">Drill</string>
+<string name="lucide_drone" translatable="false">Drone</string>
+<string name="lucide_droplet_off" translatable="false">Droplet off</string>
+<string name="lucide_droplet" translatable="false">Droplet</string>
+<string name="lucide_droplets" translatable="false">Droplets</string>
+<string name="lucide_drum" translatable="false">Drum</string>
+<string name="lucide_drumstick" translatable="false">Drumstick</string>
+<string name="lucide_dumbbell" translatable="false">Dumbbell</string>
+<string name="lucide_ear_off" translatable="false">Ear off</string>
+<string name="lucide_ear" translatable="false">Ear</string>
+<string name="lucide_earth_lock" translatable="false">Earth lock</string>
+<string name="lucide_earth" translatable="false">Earth</string>
+<string name="lucide_eclipse" translatable="false">Eclipse</string>
+<string name="lucide_egg_fried" translatable="false">Egg fried</string>
+<string name="lucide_egg_off" translatable="false">Egg off</string>
+<string name="lucide_egg" translatable="false">Egg</string>
+<string name="lucide_eject" translatable="false">Eject</string>
+<string name="lucide_ellipse" translatable="false">Ellipse</string>
+<string name="lucide_ellipsis_vertical" translatable="false">Ellipsis vertical</string>
+<string name="lucide_ellipsis" translatable="false">Ellipsis</string>
+<string name="lucide_engine" translatable="false">Engine</string>
+<string name="lucide_equal_approximately_not" translatable="false">Equal approximately not</string>
+<string name="lucide_equal_approximately" translatable="false">Equal approximately</string>
+<string name="lucide_equal_not" translatable="false">Equal not</string>
+<string name="lucide_equal" translatable="false">Equal</string>
+<string name="lucide_eraser" translatable="false">Eraser</string>
+<string name="lucide_ethernet_port" translatable="false">Ethernet port</string>
+<string name="lucide_euro" translatable="false">Euro</string>
+<string name="lucide_ev_charger" translatable="false">Ev charger</string>
+<string name="lucide_expand" translatable="false">Expand</string>
+<string name="lucide_external_link" translatable="false">External link</string>
+<string name="lucide_eye_closed" translatable="false">Eye closed</string>
+<string name="lucide_eye_dashed" translatable="false">Eye dashed</string>
+<string name="lucide_eye_off" translatable="false">Eye off</string>
+<string name="lucide_eye" translatable="false">Eye</string>
+<string name="lucide_face_angry" translatable="false">Face angry</string>
+<string name="lucide_face_expressionless" translatable="false">Face expressionless</string>
+<string name="lucide_face_grinning" translatable="false">Face grinning</string>
+<string name="lucide_face_neutral" translatable="false">Face neutral</string>
+<string name="lucide_face_slightly_frowning" translatable="false">Face slightly frowning</string>
+<string name="lucide_face_slightly_smiling_plus" translatable="false">Face slightly smiling plus</string>
+<string name="lucide_face_slightly_smiling" translatable="false">Face slightly smiling</string>
+<string name="lucide_factory" translatable="false">Factory</string>
+<string name="lucide_fan" translatable="false">Fan</string>
+<string name="lucide_fast_forward" translatable="false">Fast forward</string>
+<string name="lucide_faucet" translatable="false">Faucet</string>
+<string name="lucide_feather" translatable="false">Feather</string>
+<string name="lucide_fence" translatable="false">Fence</string>
+<string name="lucide_ferris_wheel" translatable="false">Ferris wheel</string>
+<string name="lucide_file_archive" translatable="false">File archive</string>
+<string name="lucide_file_axis_3d" translatable="false">File axis 3d</string>
+<string name="lucide_file_badge" translatable="false">File badge</string>
+<string name="lucide_file_box" translatable="false">File box</string>
+<string name="lucide_file_braces_corner" translatable="false">File braces corner</string>
+<string name="lucide_file_braces" translatable="false">File braces</string>
+<string name="lucide_file_chart_column_increasing" translatable="false">File chart column increasing</string>
+<string name="lucide_file_chart_column" translatable="false">File chart column</string>
+<string name="lucide_file_chart_line" translatable="false">File chart line</string>
+<string name="lucide_file_chart_pie" translatable="false">File chart pie</string>
+<string name="lucide_file_check_corner" translatable="false">File check corner</string>
+<string name="lucide_file_check" translatable="false">File check</string>
+<string name="lucide_file_clock" translatable="false">File clock</string>
+<string name="lucide_file_code_corner" translatable="false">File code corner</string>
+<string name="lucide_file_code" translatable="false">File code</string>
+<string name="lucide_file_cog" translatable="false">File cog</string>
+<string name="lucide_file_diff" translatable="false">File diff</string>
+<string name="lucide_file_digit" translatable="false">File digit</string>
+<string name="lucide_file_down" translatable="false">File down</string>
+<string name="lucide_file_exclamation_point" translatable="false">File exclamation point</string>
+<string name="lucide_file_headphone" translatable="false">File headphone</string>
+<string name="lucide_file_heart" translatable="false">File heart</string>
+<string name="lucide_file_image" translatable="false">File image</string>
+<string name="lucide_file_input" translatable="false">File input</string>
+<string name="lucide_file_key" translatable="false">File key</string>
+<string name="lucide_file_lock" translatable="false">File lock</string>
+<string name="lucide_file_minus_corner" translatable="false">File minus corner</string>
+<string name="lucide_file_minus" translatable="false">File minus</string>
+<string name="lucide_file_music" translatable="false">File music</string>
+<string name="lucide_file_output" translatable="false">File output</string>
+<string name="lucide_file_pen_line" translatable="false">File pen line</string>
+<string name="lucide_file_pen" translatable="false">File pen</string>
+<string name="lucide_file_play" translatable="false">File play</string>
+<string name="lucide_file_plus_corner" translatable="false">File plus corner</string>
+<string name="lucide_file_plus" translatable="false">File plus</string>
+<string name="lucide_file_question_mark" translatable="false">File question mark</string>
+<string name="lucide_file_scan" translatable="false">File scan</string>
+<string name="lucide_file_search_corner" translatable="false">File search corner</string>
+<string name="lucide_file_search" translatable="false">File search</string>
+<string name="lucide_file_signal" translatable="false">File signal</string>
+<string name="lucide_file_sliders" translatable="false">File sliders</string>
+<string name="lucide_file_spreadsheet" translatable="false">File spreadsheet</string>
+<string name="lucide_file_stack" translatable="false">File stack</string>
+<string name="lucide_file_symlink" translatable="false">File symlink</string>
+<string name="lucide_file_terminal" translatable="false">File terminal</string>
+<string name="lucide_file_text" translatable="false">File text</string>
+<string name="lucide_file_type_corner" translatable="false">File type corner</string>
+<string name="lucide_file_type" translatable="false">File type</string>
+<string name="lucide_file_up" translatable="false">File up</string>
+<string name="lucide_file_user" translatable="false">File user</string>
+<string name="lucide_file_video_camera" translatable="false">File video camera</string>
+<string name="lucide_file_volume" translatable="false">File volume</string>
+<string name="lucide_file_x_corner" translatable="false">File x corner</string>
+<string name="lucide_file_x" translatable="false">File x</string>
+<string name="lucide_file" translatable="false">File</string>
+<string name="lucide_files" translatable="false">Files</string>
+<string name="lucide_film" translatable="false">Film</string>
+<string name="lucide_fingerprint_pattern" translatable="false">Fingerprint pattern</string>
+<string name="lucide_fire_extinguisher" translatable="false">Fire extinguisher</string>
+<string name="lucide_fish_off" translatable="false">Fish off</string>
+<string name="lucide_fish_symbol" translatable="false">Fish symbol</string>
+<string name="lucide_fish" translatable="false">Fish</string>
+<string name="lucide_fishing_hook" translatable="false">Fishing hook</string>
+<string name="lucide_fishing_rod" translatable="false">Fishing rod</string>
+<string name="lucide_flag_off" translatable="false">Flag off</string>
+<string name="lucide_flag_triangle_left" translatable="false">Flag triangle left</string>
+<string name="lucide_flag_triangle_right" translatable="false">Flag triangle right</string>
+<string name="lucide_flag" translatable="false">Flag</string>
+<string name="lucide_flame_kindling" translatable="false">Flame kindling</string>
+<string name="lucide_flame" translatable="false">Flame</string>
+<string name="lucide_flashlight_off" translatable="false">Flashlight off</string>
+<string name="lucide_flashlight" translatable="false">Flashlight</string>
+<string name="lucide_flask_conical_off" translatable="false">Flask conical off</string>
+<string name="lucide_flask_conical" translatable="false">Flask conical</string>
+<string name="lucide_flask_round" translatable="false">Flask round</string>
+<string name="lucide_flower_2" translatable="false">Flower 2</string>
+<string name="lucide_flower" translatable="false">Flower</string>
+<string name="lucide_focus" translatable="false">Focus</string>
+<string name="lucide_fold_horizontal" translatable="false">Fold horizontal</string>
+<string name="lucide_fold_vertical" translatable="false">Fold vertical</string>
+<string name="lucide_folder_archive" translatable="false">Folder archive</string>
+<string name="lucide_folder_bookmark" translatable="false">Folder bookmark</string>
+<string name="lucide_folder_check" translatable="false">Folder check</string>
+<string name="lucide_folder_clock" translatable="false">Folder clock</string>
+<string name="lucide_folder_closed" translatable="false">Folder closed</string>
+<string name="lucide_folder_code" translatable="false">Folder code</string>
+<string name="lucide_folder_cog" translatable="false">Folder cog</string>
+<string name="lucide_folder_dot" translatable="false">Folder dot</string>
+<string name="lucide_folder_down" translatable="false">Folder down</string>
+<string name="lucide_folder_git_2" translatable="false">Folder git 2</string>
+<string name="lucide_folder_git" translatable="false">Folder git</string>
+<string name="lucide_folder_heart" translatable="false">Folder heart</string>
+<string name="lucide_folder_input" translatable="false">Folder input</string>
+<string name="lucide_folder_kanban" translatable="false">Folder kanban</string>
+<string name="lucide_folder_key" translatable="false">Folder key</string>
+<string name="lucide_folder_lock" translatable="false">Folder lock</string>
+<string name="lucide_folder_minus" translatable="false">Folder minus</string>
+<string name="lucide_folder_open_dot" translatable="false">Folder open dot</string>
+<string name="lucide_folder_open" translatable="false">Folder open</string>
+<string name="lucide_folder_output" translatable="false">Folder output</string>
+<string name="lucide_folder_pen" translatable="false">Folder pen</string>
+<string name="lucide_folder_plus" translatable="false">Folder plus</string>
+<string name="lucide_folder_root" translatable="false">Folder root</string>
+<string name="lucide_folder_search_2" translatable="false">Folder search 2</string>
+<string name="lucide_folder_search" translatable="false">Folder search</string>
+<string name="lucide_folder_symlink" translatable="false">Folder symlink</string>
+<string name="lucide_folder_sync" translatable="false">Folder sync</string>
+<string name="lucide_folder_tree" translatable="false">Folder tree</string>
+<string name="lucide_folder_up" translatable="false">Folder up</string>
+<string name="lucide_folder_x" translatable="false">Folder x</string>
+<string name="lucide_folder" translatable="false">Folder</string>
+<string name="lucide_folders" translatable="false">Folders</string>
+<string name="lucide_footprints" translatable="false">Footprints</string>
+<string name="lucide_forklift" translatable="false">Forklift</string>
+<string name="lucide_form" translatable="false">Form</string>
+<string name="lucide_forward" translatable="false">Forward</string>
+<string name="lucide_frame" translatable="false">Frame</string>
+<string name="lucide_fuel" translatable="false">Fuel</string>
+<string name="lucide_fullscreen" translatable="false">Fullscreen</string>
+<string name="lucide_funnel_plus" translatable="false">Funnel plus</string>
+<string name="lucide_funnel_x" translatable="false">Funnel x</string>
+<string name="lucide_funnel" translatable="false">Funnel</string>
+<string name="lucide_galaxy" translatable="false">Galaxy</string>
+<string name="lucide_gallery_horizontal_end" translatable="false">Gallery horizontal end</string>
+<string name="lucide_gallery_horizontal" translatable="false">Gallery horizontal</string>
+<string name="lucide_gallery_thumbnails" translatable="false">Gallery thumbnails</string>
+<string name="lucide_gallery_vertical_end" translatable="false">Gallery vertical end</string>
+<string name="lucide_gallery_vertical" translatable="false">Gallery vertical</string>
+<string name="lucide_gamepad_2" translatable="false">Gamepad 2</string>
+<string name="lucide_gamepad_directional" translatable="false">Gamepad directional</string>
+<string name="lucide_gamepad" translatable="false">Gamepad</string>
+<string name="lucide_gap_horizontal" translatable="false">Gap horizontal</string>
+<string name="lucide_gap_vertical" translatable="false">Gap vertical</string>
+<string name="lucide_gauge" translatable="false">Gauge</string>
+<string name="lucide_gavel" translatable="false">Gavel</string>
+<string name="lucide_gem" translatable="false">Gem</string>
+<string name="lucide_georgian_lari" translatable="false">Georgian lari</string>
+<string name="lucide_germ_off" translatable="false">Germ off</string>
+<string name="lucide_germ" translatable="false">Germ</string>
+<string name="lucide_ghost" translatable="false">Ghost</string>
+<string name="lucide_gift" translatable="false">Gift</string>
+<string name="lucide_git_branch_minus" translatable="false">Git branch minus</string>
+<string name="lucide_git_branch_plus" translatable="false">Git branch plus</string>
+<string name="lucide_git_branch" translatable="false">Git branch</string>
+<string name="lucide_git_commit_horizontal" translatable="false">Git commit horizontal</string>
+<string name="lucide_git_commit_vertical" translatable="false">Git commit vertical</string>
+<string name="lucide_git_compare_arrows" translatable="false">Git compare arrows</string>
+<string name="lucide_git_compare" translatable="false">Git compare</string>
+<string name="lucide_git_fork" translatable="false">Git fork</string>
+<string name="lucide_git_graph" translatable="false">Git graph</string>
+<string name="lucide_git_merge_conflict" translatable="false">Git merge conflict</string>
+<string name="lucide_git_merge" translatable="false">Git merge</string>
+<string name="lucide_git_pull_request_arrow" translatable="false">Git pull request arrow</string>
+<string name="lucide_git_pull_request_closed" translatable="false">Git pull request closed</string>
+<string name="lucide_git_pull_request_create_arrow" translatable="false">Git pull request create arrow</string>
+<string name="lucide_git_pull_request_create" translatable="false">Git pull request create</string>
+<string name="lucide_git_pull_request_draft" translatable="false">Git pull request draft</string>
+<string name="lucide_git_pull_request" translatable="false">Git pull request</string>
+<string name="lucide_glass_water" translatable="false">Glass water</string>
+<string name="lucide_glasses" translatable="false">Glasses</string>
+<string name="lucide_globe_check" translatable="false">Globe check</string>
+<string name="lucide_globe_code" translatable="false">Globe code</string>
+<string name="lucide_globe_lock" translatable="false">Globe lock</string>
+<string name="lucide_globe_off" translatable="false">Globe off</string>
+<string name="lucide_globe_x" translatable="false">Globe x</string>
+<string name="lucide_globe" translatable="false">Globe</string>
+<string name="lucide_goal" translatable="false">Goal</string>
+<string name="lucide_gpu" translatable="false">Gpu</string>
+<string name="lucide_graduation_cap" translatable="false">Graduation cap</string>
+<string name="lucide_grape" translatable="false">Grape</string>
+<string name="lucide_grid_2x2_check" translatable="false">Grid 2x2 check</string>
+<string name="lucide_grid_2x2_plus" translatable="false">Grid 2x2 plus</string>
+<string name="lucide_grid_2x2_x" translatable="false">Grid 2x2 x</string>
+<string name="lucide_grid_2x2" translatable="false">Grid 2x2</string>
+<string name="lucide_grid_3x2" translatable="false">Grid 3x2</string>
+<string name="lucide_grid_3x3" translatable="false">Grid 3x3</string>
+<string name="lucide_grip_horizontal" translatable="false">Grip horizontal</string>
+<string name="lucide_grip_vertical" translatable="false">Grip vertical</string>
+<string name="lucide_grip" translatable="false">Grip</string>
+<string name="lucide_group" translatable="false">Group</string>
+<string name="lucide_guitar" translatable="false">Guitar</string>
+<string name="lucide_ham" translatable="false">Ham</string>
+<string name="lucide_hamburger" translatable="false">Hamburger</string>
+<string name="lucide_hammer" translatable="false">Hammer</string>
+<string name="lucide_hand_coins" translatable="false">Hand coins</string>
+<string name="lucide_hand_fist" translatable="false">Hand fist</string>
+<string name="lucide_hand_grab" translatable="false">Hand grab</string>
+<string name="lucide_hand_heart" translatable="false">Hand heart</string>
+<string name="lucide_hand_helping" translatable="false">Hand helping</string>
+<string name="lucide_hand_metal" translatable="false">Hand metal</string>
+<string name="lucide_hand_platter" translatable="false">Hand platter</string>
+<string name="lucide_hand" translatable="false">Hand</string>
+<string name="lucide_handbag" translatable="false">Handbag</string>
+<string name="lucide_handshake" translatable="false">Handshake</string>
+<string name="lucide_hard_drive_download" translatable="false">Hard drive download</string>
+<string name="lucide_hard_drive_upload" translatable="false">Hard drive upload</string>
+<string name="lucide_hard_drive" translatable="false">Hard drive</string>
+<string name="lucide_hard_hat" translatable="false">Hard hat</string>
+<string name="lucide_hash" translatable="false">Hash</string>
+<string name="lucide_hat_glasses" translatable="false">Hat glasses</string>
+<string name="lucide_haze" translatable="false">Haze</string>
+<string name="lucide_hd" translatable="false">Hd</string>
+<string name="lucide_hdmi_port" translatable="false">Hdmi port</string>
+<string name="lucide_heading_1" translatable="false">Heading 1</string>
+<string name="lucide_heading_2" translatable="false">Heading 2</string>
+<string name="lucide_heading_3" translatable="false">Heading 3</string>
+<string name="lucide_heading_4" translatable="false">Heading 4</string>
+<string name="lucide_heading_5" translatable="false">Heading 5</string>
+<string name="lucide_heading_6" translatable="false">Heading 6</string>
+<string name="lucide_heading" translatable="false">Heading</string>
+<string name="lucide_headphone_off" translatable="false">Headphone off</string>
+<string name="lucide_headphones" translatable="false">Headphones</string>
+<string name="lucide_headset" translatable="false">Headset</string>
+<string name="lucide_heart_crack" translatable="false">Heart crack</string>
+<string name="lucide_heart_handshake" translatable="false">Heart handshake</string>
+<string name="lucide_heart_minus" translatable="false">Heart minus</string>
+<string name="lucide_heart_off" translatable="false">Heart off</string>
+<string name="lucide_heart_plus" translatable="false">Heart plus</string>
+<string name="lucide_heart_pulse" translatable="false">Heart pulse</string>
+<string name="lucide_heart_x" translatable="false">Heart x</string>
+<string name="lucide_heart" translatable="false">Heart</string>
+<string name="lucide_heater" translatable="false">Heater</string>
+<string name="lucide_helicopter" translatable="false">Helicopter</string>
+<string name="lucide_hexagon" translatable="false">Hexagon</string>
+<string name="lucide_highlighter" translatable="false">Highlighter</string>
+<string name="lucide_hop_off" translatable="false">Hop off</string>
+<string name="lucide_hop" translatable="false">Hop</string>
+<string name="lucide_hospital" translatable="false">Hospital</string>
+<string name="lucide_hotel" translatable="false">Hotel</string>
+<string name="lucide_hourglass_cog" translatable="false">Hourglass cog</string>
+<string name="lucide_hourglass" translatable="false">Hourglass</string>
+<string name="lucide_house_cog" translatable="false">House cog</string>
+<string name="lucide_house_heart" translatable="false">House heart</string>
+<string name="lucide_house_plug" translatable="false">House plug</string>
+<string name="lucide_house_plus" translatable="false">House plus</string>
+<string name="lucide_house_wifi" translatable="false">House wifi</string>
+<string name="lucide_house" translatable="false">House</string>
+<string name="lucide_houses" translatable="false">Houses</string>
+<string name="lucide_ice_cream_bowl" translatable="false">Ice cream bowl</string>
+<string name="lucide_ice_cream_cone" translatable="false">Ice cream cone</string>
+<string name="lucide_id_card_lanyard" translatable="false">Id card lanyard</string>
+<string name="lucide_id_card" translatable="false">Id card</string>
+<string name="lucide_image_down" translatable="false">Image down</string>
+<string name="lucide_image_minus" translatable="false">Image minus</string>
+<string name="lucide_image_off" translatable="false">Image off</string>
+<string name="lucide_image_play" translatable="false">Image play</string>
+<string name="lucide_image_plus" translatable="false">Image plus</string>
+<string name="lucide_image_up" translatable="false">Image up</string>
+<string name="lucide_image_upscale" translatable="false">Image upscale</string>
+<string name="lucide_image" translatable="false">Image</string>
+<string name="lucide_images" translatable="false">Images</string>
+<string name="lucide_import" translatable="false">Import</string>
+<string name="lucide_inbox" translatable="false">Inbox</string>
+<string name="lucide_indian_rupee" translatable="false">Indian rupee</string>
+<string name="lucide_infinity" translatable="false">Infinity</string>
+<string name="lucide_info" translatable="false">Info</string>
+<string name="lucide_inspection_panel" translatable="false">Inspection panel</string>
+<string name="lucide_italic" translatable="false">Italic</string>
+<string name="lucide_iteration_ccw" translatable="false">Iteration ccw</string>
+<string name="lucide_iteration_cw" translatable="false">Iteration cw</string>
+<string name="lucide_iv_bag" translatable="false">Iv bag</string>
+<string name="lucide_japanese_yen" translatable="false">Japanese yen</string>
+<string name="lucide_joystick" translatable="false">Joystick</string>
+<string name="lucide_kanban" translatable="false">Kanban</string>
+<string name="lucide_kayak" translatable="false">Kayak</string>
+<string name="lucide_kazakh_tenge" translatable="false">Kazakh tenge</string>
+<string name="lucide_key_round" translatable="false">Key round</string>
+<string name="lucide_key_square" translatable="false">Key square</string>
+<string name="lucide_key" translatable="false">Key</string>
+<string name="lucide_keyboard_music" translatable="false">Keyboard music</string>
+<string name="lucide_keyboard_off" translatable="false">Keyboard off</string>
+<string name="lucide_keyboard" translatable="false">Keyboard</string>
+<string name="lucide_lambda" translatable="false">Lambda</string>
+<string name="lucide_lamp_ceiling" translatable="false">Lamp ceiling</string>
+<string name="lucide_lamp_desk" translatable="false">Lamp desk</string>
+<string name="lucide_lamp_floor" translatable="false">Lamp floor</string>
+<string name="lucide_lamp_wall_down" translatable="false">Lamp wall down</string>
+<string name="lucide_lamp_wall_up" translatable="false">Lamp wall up</string>
+<string name="lucide_lamp" translatable="false">Lamp</string>
+<string name="lucide_land_plot" translatable="false">Land plot</string>
+<string name="lucide_landmark" translatable="false">Landmark</string>
+<string name="lucide_languages" translatable="false">Languages</string>
+<string name="lucide_laptop_minimal_check" translatable="false">Laptop minimal check</string>
+<string name="lucide_laptop_minimal" translatable="false">Laptop minimal</string>
+<string name="lucide_laptop" translatable="false">Laptop</string>
+<string name="lucide_lasso_select" translatable="false">Lasso select</string>
+<string name="lucide_lasso" translatable="false">Lasso</string>
+<string name="lucide_layer_arrow_down" translatable="false">Layer arrow down</string>
+<string name="lucide_layer_arrow_up" translatable="false">Layer arrow up</string>
+<string name="lucide_layers_2" translatable="false">Layers 2</string>
+<string name="lucide_layers_arrow_down" translatable="false">Layers arrow down</string>
+<string name="lucide_layers_arrow_up" translatable="false">Layers arrow up</string>
+<string name="lucide_layers_minus" translatable="false">Layers minus</string>
+<string name="lucide_layers_plus" translatable="false">Layers plus</string>
+<string name="lucide_layers" translatable="false">Layers</string>
+<string name="lucide_layout_arrow_down" translatable="false">Layout arrow down</string>
+<string name="lucide_layout_arrow_right" translatable="false">Layout arrow right</string>
+<string name="lucide_layout_dashboard" translatable="false">Layout dashboard</string>
+<string name="lucide_layout_freeform" translatable="false">Layout freeform</string>
+<string name="lucide_layout_grid_circles" translatable="false">Layout grid circles</string>
+<string name="lucide_layout_grid" translatable="false">Layout grid</string>
+<string name="lucide_layout_list" translatable="false">Layout list</string>
+<string name="lucide_layout_panel_left" translatable="false">Layout panel left</string>
+<string name="lucide_layout_panel_top" translatable="false">Layout panel top</string>
+<string name="lucide_layout_template" translatable="false">Layout template</string>
+<string name="lucide_leaf" translatable="false">Leaf</string>
+<string name="lucide_leafy_green" translatable="false">Leafy green</string>
+<string name="lucide_lectern" translatable="false">Lectern</string>
+<string name="lucide_lens_concave" translatable="false">Lens concave</string>
+<string name="lucide_lens_convex" translatable="false">Lens convex</string>
+<string name="lucide_letters" translatable="false">Letters</string>
+<string name="lucide_library_big" translatable="false">Library big</string>
+<string name="lucide_library" translatable="false">Library</string>
+<string name="lucide_life_buoy" translatable="false">Life buoy</string>
+<string name="lucide_ligature" translatable="false">Ligature</string>
+<string name="lucide_lightbulb_off" translatable="false">Lightbulb off</string>
+<string name="lucide_lightbulb" translatable="false">Lightbulb</string>
+<string name="lucide_lighthouse" translatable="false">Lighthouse</string>
+<string name="lucide_line_dot_bottom_vertical" translatable="false">Line dot bottom vertical</string>
+<string name="lucide_line_dot_left_horizontal" translatable="false">Line dot left horizontal</string>
+<string name="lucide_line_dot_right_horizontal" translatable="false">Line dot right horizontal</string>
+<string name="lucide_line_dot_top_vertical" translatable="false">Line dot top vertical</string>
+<string name="lucide_line_squiggle" translatable="false">Line squiggle</string>
+<string name="lucide_line_style" translatable="false">Line style</string>
+<string name="lucide_link_2_off" translatable="false">Link 2 off</string>
+<string name="lucide_link_2" translatable="false">Link 2</string>
+<string name="lucide_link" translatable="false">Link</string>
+<string name="lucide_list_check" translatable="false">List check</string>
+<string name="lucide_list_checks" translatable="false">List checks</string>
+<string name="lucide_list_chevrons_down_up" translatable="false">List chevrons down up</string>
+<string name="lucide_list_chevrons_up_down" translatable="false">List chevrons up down</string>
+<string name="lucide_list_clock" translatable="false">List clock</string>
+<string name="lucide_list_collapse" translatable="false">List collapse</string>
+<string name="lucide_list_end" translatable="false">List end</string>
+<string name="lucide_list_filter_plus" translatable="false">List filter plus</string>
+<string name="lucide_list_filter" translatable="false">List filter</string>
+<string name="lucide_list_indent_decrease" translatable="false">List indent decrease</string>
+<string name="lucide_list_indent_increase" translatable="false">List indent increase</string>
+<string name="lucide_list_minus" translatable="false">List minus</string>
+<string name="lucide_list_music" translatable="false">List music</string>
+<string name="lucide_list_ordered" translatable="false">List ordered</string>
+<string name="lucide_list_plus" translatable="false">List plus</string>
+<string name="lucide_list_restart" translatable="false">List restart</string>
+<string name="lucide_list_sort_ascending" translatable="false">List sort ascending</string>
+<string name="lucide_list_sort_descending" translatable="false">List sort descending</string>
+<string name="lucide_list_start" translatable="false">List start</string>
+<string name="lucide_list_todo" translatable="false">List todo</string>
+<string name="lucide_list_tree" translatable="false">List tree</string>
+<string name="lucide_list_video" translatable="false">List video</string>
+<string name="lucide_list_x" translatable="false">List x</string>
+<string name="lucide_list" translatable="false">List</string>
+<string name="lucide_loader_circle" translatable="false">Loader circle</string>
+<string name="lucide_loader_pinwheel" translatable="false">Loader pinwheel</string>
+<string name="lucide_loader" translatable="false">Loader</string>
+<string name="lucide_locate_fixed" translatable="false">Locate fixed</string>
+<string name="lucide_locate_off" translatable="false">Locate off</string>
+<string name="lucide_locate" translatable="false">Locate</string>
+<string name="lucide_lock_keyhole_open" translatable="false">Lock keyhole open</string>
+<string name="lucide_lock_keyhole" translatable="false">Lock keyhole</string>
+<string name="lucide_lock_open" translatable="false">Lock open</string>
+<string name="lucide_lock" translatable="false">Lock</string>
+<string name="lucide_log_in" translatable="false">Log in</string>
+<string name="lucide_log_out" translatable="false">Log out</string>
+<string name="lucide_logs" translatable="false">Logs</string>
+<string name="lucide_lollipop" translatable="false">Lollipop</string>
+<string name="lucide_luggage" translatable="false">Luggage</string>
+<string name="lucide_magnet" translatable="false">Magnet</string>
+<string name="lucide_mail_badge" translatable="false">Mail badge</string>
+<string name="lucide_mail_check" translatable="false">Mail check</string>
+<string name="lucide_mail_clock" translatable="false">Mail clock</string>
+<string name="lucide_mail_minus" translatable="false">Mail minus</string>
+<string name="lucide_mail_open" translatable="false">Mail open</string>
+<string name="lucide_mail_pen" translatable="false">Mail pen</string>
+<string name="lucide_mail_plus" translatable="false">Mail plus</string>
+<string name="lucide_mail_question_mark" translatable="false">Mail question mark</string>
+<string name="lucide_mail_search" translatable="false">Mail search</string>
+<string name="lucide_mail_warning" translatable="false">Mail warning</string>
+<string name="lucide_mail_x" translatable="false">Mail x</string>
+<string name="lucide_mail" translatable="false">Mail</string>
+<string name="lucide_mailbox" translatable="false">Mailbox</string>
+<string name="lucide_mails" translatable="false">Mails</string>
+<string name="lucide_map_minus" translatable="false">Map minus</string>
+<string name="lucide_map_pin_check_inside" translatable="false">Map pin check inside</string>
+<string name="lucide_map_pin_check" translatable="false">Map pin check</string>
+<string name="lucide_map_pin_house" translatable="false">Map pin house</string>
+<string name="lucide_map_pin_minus_inside" translatable="false">Map pin minus inside</string>
+<string name="lucide_map_pin_minus" translatable="false">Map pin minus</string>
+<string name="lucide_map_pin_off" translatable="false">Map pin off</string>
+<string name="lucide_map_pin_pen" translatable="false">Map pin pen</string>
+<string name="lucide_map_pin_plus_inside" translatable="false">Map pin plus inside</string>
+<string name="lucide_map_pin_plus" translatable="false">Map pin plus</string>
+<string name="lucide_map_pin_search" translatable="false">Map pin search</string>
+<string name="lucide_map_pin_x_inside" translatable="false">Map pin x inside</string>
+<string name="lucide_map_pin_x" translatable="false">Map pin x</string>
+<string name="lucide_map_pin" translatable="false">Map pin</string>
+<string name="lucide_map_pinned" translatable="false">Map pinned</string>
+<string name="lucide_map_plus" translatable="false">Map plus</string>
+<string name="lucide_map" translatable="false">Map</string>
+<string name="lucide_mars_stroke" translatable="false">Mars stroke</string>
+<string name="lucide_mars" translatable="false">Mars</string>
+<string name="lucide_martini" translatable="false">Martini</string>
+<string name="lucide_maximize_2" translatable="false">Maximize 2</string>
+<string name="lucide_maximize" translatable="false">Maximize</string>
+<string name="lucide_medal" translatable="false">Medal</string>
+<string name="lucide_megaphone_off" translatable="false">Megaphone off</string>
+<string name="lucide_megaphone" translatable="false">Megaphone</string>
+<string name="lucide_memory_stick" translatable="false">Memory stick</string>
+<string name="lucide_menu" translatable="false">Menu</string>
+<string name="lucide_merge" translatable="false">Merge</string>
+<string name="lucide_message_circle_check" translatable="false">Message circle check</string>
+<string name="lucide_message_circle_code" translatable="false">Message circle code</string>
+<string name="lucide_message_circle_dashed_check" translatable="false">Message circle dashed check</string>
+<string name="lucide_message_circle_dashed" translatable="false">Message circle dashed</string>
+<string name="lucide_message_circle_heart" translatable="false">Message circle heart</string>
+<string name="lucide_message_circle_more" translatable="false">Message circle more</string>
+<string name="lucide_message_circle_off" translatable="false">Message circle off</string>
+<string name="lucide_message_circle_plus" translatable="false">Message circle plus</string>
+<string name="lucide_message_circle_question_mark" translatable="false">Message circle question mark</string>
+<string name="lucide_message_circle_reply" translatable="false">Message circle reply</string>
+<string name="lucide_message_circle_warning" translatable="false">Message circle warning</string>
+<string name="lucide_message_circle_x" translatable="false">Message circle x</string>
+<string name="lucide_message_circle" translatable="false">Message circle</string>
+<string name="lucide_message_square_check" translatable="false">Message square check</string>
+<string name="lucide_message_square_code" translatable="false">Message square code</string>
+<string name="lucide_message_square_dashed" translatable="false">Message square dashed</string>
+<string name="lucide_message_square_diff" translatable="false">Message square diff</string>
+<string name="lucide_message_square_dot" translatable="false">Message square dot</string>
+<string name="lucide_message_square_heart" translatable="false">Message square heart</string>
+<string name="lucide_message_square_lock" translatable="false">Message square lock</string>
+<string name="lucide_message_square_more" translatable="false">Message square more</string>
+<string name="lucide_message_square_off" translatable="false">Message square off</string>
+<string name="lucide_message_square_plus" translatable="false">Message square plus</string>
+<string name="lucide_message_square_quote" translatable="false">Message square quote</string>
+<string name="lucide_message_square_reply" translatable="false">Message square reply</string>
+<string name="lucide_message_square_share" translatable="false">Message square share</string>
+<string name="lucide_message_square_text" translatable="false">Message square text</string>
+<string name="lucide_message_square_warning" translatable="false">Message square warning</string>
+<string name="lucide_message_square_x" translatable="false">Message square x</string>
+<string name="lucide_message_square" translatable="false">Message square</string>
+<string name="lucide_messages_circle" translatable="false">Messages circle</string>
+<string name="lucide_messages_square" translatable="false">Messages square</string>
+<string name="lucide_metronome" translatable="false">Metronome</string>
+<string name="lucide_mic_audio_lines" translatable="false">Mic audio lines</string>
+<string name="lucide_mic_off" translatable="false">Mic off</string>
+<string name="lucide_mic_signal" translatable="false">Mic signal</string>
+<string name="lucide_mic_vocal" translatable="false">Mic vocal</string>
+<string name="lucide_mic" translatable="false">Mic</string>
+<string name="lucide_microchip" translatable="false">Microchip</string>
+<string name="lucide_microscope" translatable="false">Microscope</string>
+<string name="lucide_microwave" translatable="false">Microwave</string>
+<string name="lucide_midi_port" translatable="false">Midi port</string>
+<string name="lucide_milestone" translatable="false">Milestone</string>
+<string name="lucide_milk_off" translatable="false">Milk off</string>
+<string name="lucide_milk" translatable="false">Milk</string>
+<string name="lucide_minimize_2" translatable="false">Minimize 2</string>
+<string name="lucide_minimize" translatable="false">Minimize</string>
+<string name="lucide_minus" translatable="false">Minus</string>
+<string name="lucide_mirror_rectangular" translatable="false">Mirror rectangular</string>
+<string name="lucide_mirror_round" translatable="false">Mirror round</string>
+<string name="lucide_monitor_check" translatable="false">Monitor check</string>
+<string name="lucide_monitor_cloud" translatable="false">Monitor cloud</string>
+<string name="lucide_monitor_cog" translatable="false">Monitor cog</string>
+<string name="lucide_monitor_dot" translatable="false">Monitor dot</string>
+<string name="lucide_monitor_down" translatable="false">Monitor down</string>
+<string name="lucide_monitor_off" translatable="false">Monitor off</string>
+<string name="lucide_monitor_pause" translatable="false">Monitor pause</string>
+<string name="lucide_monitor_pc" translatable="false">Monitor pc</string>
+<string name="lucide_monitor_play" translatable="false">Monitor play</string>
+<string name="lucide_monitor_smartphone" translatable="false">Monitor smartphone</string>
+<string name="lucide_monitor_speaker" translatable="false">Monitor speaker</string>
+<string name="lucide_monitor_stop" translatable="false">Monitor stop</string>
+<string name="lucide_monitor_up" translatable="false">Monitor up</string>
+<string name="lucide_monitor_x" translatable="false">Monitor x</string>
+<string name="lucide_monitor" translatable="false">Monitor</string>
+<string name="lucide_moon_star" translatable="false">Moon star</string>
+<string name="lucide_moon" translatable="false">Moon</string>
+<string name="lucide_mop_sparkles" translatable="false">Mop sparkles</string>
+<string name="lucide_mop" translatable="false">Mop</string>
+<string name="lucide_mosque" translatable="false">Mosque</string>
+<string name="lucide_motorbike" translatable="false">Motorbike</string>
+<string name="lucide_mountain_snow" translatable="false">Mountain snow</string>
+<string name="lucide_mountain" translatable="false">Mountain</string>
+<string name="lucide_mouse_left" translatable="false">Mouse left</string>
+<string name="lucide_mouse_off" translatable="false">Mouse off</string>
+<string name="lucide_mouse_pointer_2_off" translatable="false">Mouse pointer 2 off</string>
+<string name="lucide_mouse_pointer_2" translatable="false">Mouse pointer 2</string>
+<string name="lucide_mouse_pointer_ban" translatable="false">Mouse pointer ban</string>
+<string name="lucide_mouse_pointer_click" translatable="false">Mouse pointer click</string>
+<string name="lucide_mouse_pointer" translatable="false">Mouse pointer</string>
+<string name="lucide_mouse_right" translatable="false">Mouse right</string>
+<string name="lucide_mouse" translatable="false">Mouse</string>
+<string name="lucide_mouth_off" translatable="false">Mouth off</string>
+<string name="lucide_mouth" translatable="false">Mouth</string>
+<string name="lucide_move_3d" translatable="false">Move 3d</string>
+<string name="lucide_move_diagonal_2" translatable="false">Move diagonal 2</string>
+<string name="lucide_move_diagonal" translatable="false">Move diagonal</string>
+<string name="lucide_move_down_left" translatable="false">Move down left</string>
+<string name="lucide_move_down_right" translatable="false">Move down right</string>
+<string name="lucide_move_down" translatable="false">Move down</string>
+<string name="lucide_move_horizontal" translatable="false">Move horizontal</string>
+<string name="lucide_move_left" translatable="false">Move left</string>
+<string name="lucide_move_right" translatable="false">Move right</string>
+<string name="lucide_move_up_left" translatable="false">Move up left</string>
+<string name="lucide_move_up_right" translatable="false">Move up right</string>
+<string name="lucide_move_up" translatable="false">Move up</string>
+<string name="lucide_move_vertical" translatable="false">Move vertical</string>
+<string name="lucide_move" translatable="false">Move</string>
+<string name="lucide_music_2" translatable="false">Music 2</string>
+<string name="lucide_music_3" translatable="false">Music 3</string>
+<string name="lucide_music_4" translatable="false">Music 4</string>
+<string name="lucide_music" translatable="false">Music</string>
+<string name="lucide_navigation_2_off" translatable="false">Navigation 2 off</string>
+<string name="lucide_navigation_2" translatable="false">Navigation 2</string>
+<string name="lucide_navigation_off" translatable="false">Navigation off</string>
+<string name="lucide_navigation" translatable="false">Navigation</string>
+<string name="lucide_nepali_rupee" translatable="false">Nepali rupee</string>
+<string name="lucide_network" translatable="false">Network</string>
+<string name="lucide_newspaper" translatable="false">Newspaper</string>
+<string name="lucide_nfc" translatable="false">Nfc</string>
+<string name="lucide_non_binary" translatable="false">Non binary</string>
+<string name="lucide_notebook_dot" translatable="false">Notebook dot</string>
+<string name="lucide_notebook_pen" translatable="false">Notebook pen</string>
+<string name="lucide_notebook_tabs" translatable="false">Notebook tabs</string>
+<string name="lucide_notebook_text" translatable="false">Notebook text</string>
+<string name="lucide_notebook" translatable="false">Notebook</string>
+<string name="lucide_notepad_text_dashed" translatable="false">Notepad text dashed</string>
+<string name="lucide_notepad_text" translatable="false">Notepad text</string>
+<string name="lucide_nut_off" translatable="false">Nut off</string>
+<string name="lucide_nut" translatable="false">Nut</string>
+<string name="lucide_octagon_alert" translatable="false">Octagon alert</string>
+<string name="lucide_octagon_minus" translatable="false">Octagon minus</string>
+<string name="lucide_octagon_pause" translatable="false">Octagon pause</string>
+<string name="lucide_octagon_x" translatable="false">Octagon x</string>
+<string name="lucide_octagon" translatable="false">Octagon</string>
+<string name="lucide_omega" translatable="false">Omega</string>
+<string name="lucide_option" translatable="false">Option</string>
+<string name="lucide_orbit" translatable="false">Orbit</string>
+<string name="lucide_origami" translatable="false">Origami</string>
+<string name="lucide_package_2" translatable="false">Package 2</string>
+<string name="lucide_package_check" translatable="false">Package check</string>
+<string name="lucide_package_minus" translatable="false">Package minus</string>
+<string name="lucide_package_open" translatable="false">Package open</string>
+<string name="lucide_package_plus" translatable="false">Package plus</string>
+<string name="lucide_package_search" translatable="false">Package search</string>
+<string name="lucide_package_x" translatable="false">Package x</string>
+<string name="lucide_package" translatable="false">Package</string>
+<string name="lucide_paint_bucket" translatable="false">Paint bucket</string>
+<string name="lucide_paint_roller" translatable="false">Paint roller</string>
+<string name="lucide_paintbrush_vertical" translatable="false">Paintbrush vertical</string>
+<string name="lucide_paintbrush" translatable="false">Paintbrush</string>
+<string name="lucide_palette" translatable="false">Palette</string>
+<string name="lucide_panda" translatable="false">Panda</string>
+<string name="lucide_panel_bottom_close" translatable="false">Panel bottom close</string>
+<string name="lucide_panel_bottom_dashed" translatable="false">Panel bottom dashed</string>
+<string name="lucide_panel_bottom_open" translatable="false">Panel bottom open</string>
+<string name="lucide_panel_bottom" translatable="false">Panel bottom</string>
+<string name="lucide_panel_left_close" translatable="false">Panel left close</string>
+<string name="lucide_panel_left_dashed" translatable="false">Panel left dashed</string>
+<string name="lucide_panel_left_open" translatable="false">Panel left open</string>
+<string name="lucide_panel_left_right_dashed" translatable="false">Panel left right dashed</string>
+<string name="lucide_panel_left" translatable="false">Panel left</string>
+<string name="lucide_panel_right_close" translatable="false">Panel right close</string>
+<string name="lucide_panel_right_dashed" translatable="false">Panel right dashed</string>
+<string name="lucide_panel_right_open" translatable="false">Panel right open</string>
+<string name="lucide_panel_right" translatable="false">Panel right</string>
+<string name="lucide_panel_top_bottom_dashed" translatable="false">Panel top bottom dashed</string>
+<string name="lucide_panel_top_close" translatable="false">Panel top close</string>
+<string name="lucide_panel_top_dashed" translatable="false">Panel top dashed</string>
+<string name="lucide_panel_top_open" translatable="false">Panel top open</string>
+<string name="lucide_panel_top" translatable="false">Panel top</string>
+<string name="lucide_panels_left_bottom" translatable="false">Panels left bottom</string>
+<string name="lucide_panels_right_bottom" translatable="false">Panels right bottom</string>
+<string name="lucide_panels_top_left" translatable="false">Panels top left</string>
+<string name="lucide_paper_bag" translatable="false">Paper bag</string>
+<string name="lucide_paperclip" translatable="false">Paperclip</string>
+<string name="lucide_parasol" translatable="false">Parasol</string>
+<string name="lucide_parentheses" translatable="false">Parentheses</string>
+<string name="lucide_park" translatable="false">Park</string>
+<string name="lucide_parking_meter" translatable="false">Parking meter</string>
+<string name="lucide_party_popper" translatable="false">Party popper</string>
+<string name="lucide_pause" translatable="false">Pause</string>
+<string name="lucide_paw_print" translatable="false">Paw print</string>
+<string name="lucide_pc_case" translatable="false">Pc case</string>
+<string name="lucide_pen_line" translatable="false">Pen line</string>
+<string name="lucide_pen_off" translatable="false">Pen off</string>
+<string name="lucide_pen_tool" translatable="false">Pen tool</string>
+<string name="lucide_pen" translatable="false">Pen</string>
+<string name="lucide_pencil_line" translatable="false">Pencil line</string>
+<string name="lucide_pencil_off" translatable="false">Pencil off</string>
+<string name="lucide_pencil_ruler" translatable="false">Pencil ruler</string>
+<string name="lucide_pencil_sparkles" translatable="false">Pencil sparkles</string>
+<string name="lucide_pencil" translatable="false">Pencil</string>
+<string name="lucide_pentagon" translatable="false">Pentagon</string>
+<string name="lucide_percent" translatable="false">Percent</string>
+<string name="lucide_person_standing" translatable="false">Person standing</string>
+<string name="lucide_phi" translatable="false">Phi</string>
+<string name="lucide_philippine_peso" translatable="false">Philippine peso</string>
+<string name="lucide_phone_call" translatable="false">Phone call</string>
+<string name="lucide_phone_forwarded" translatable="false">Phone forwarded</string>
+<string name="lucide_phone_incoming" translatable="false">Phone incoming</string>
+<string name="lucide_phone_missed" translatable="false">Phone missed</string>
+<string name="lucide_phone_off" translatable="false">Phone off</string>
+<string name="lucide_phone_outgoing" translatable="false">Phone outgoing</string>
+<string name="lucide_phone" translatable="false">Phone</string>
+<string name="lucide_pi" translatable="false">Pi</string>
+<string name="lucide_piano" translatable="false">Piano</string>
+<string name="lucide_pickaxe" translatable="false">Pickaxe</string>
+<string name="lucide_picture_in_picture_2" translatable="false">Picture in picture 2</string>
+<string name="lucide_picture_in_picture" translatable="false">Picture in picture</string>
+<string name="lucide_piggy_bank" translatable="false">Piggy bank</string>
+<string name="lucide_pilcrow_left" translatable="false">Pilcrow left</string>
+<string name="lucide_pilcrow_right" translatable="false">Pilcrow right</string>
+<string name="lucide_pilcrow" translatable="false">Pilcrow</string>
+<string name="lucide_pill_bottle" translatable="false">Pill bottle</string>
+<string name="lucide_pill" translatable="false">Pill</string>
+<string name="lucide_pin_off" translatable="false">Pin off</string>
+<string name="lucide_pin" translatable="false">Pin</string>
+<string name="lucide_pipette" translatable="false">Pipette</string>
+<string name="lucide_pizza" translatable="false">Pizza</string>
+<string name="lucide_plane_landing" translatable="false">Plane landing</string>
+<string name="lucide_plane_takeoff" translatable="false">Plane takeoff</string>
+<string name="lucide_plane" translatable="false">Plane</string>
+<string name="lucide_plant_pot" translatable="false">Plant pot</string>
+<string name="lucide_play_off" translatable="false">Play off</string>
+<string name="lucide_play" translatable="false">Play</string>
+<string name="lucide_playing_card" translatable="false">Playing card</string>
+<string name="lucide_playing_cards_fan" translatable="false">Playing cards fan</string>
+<string name="lucide_playing_cards" translatable="false">Playing cards</string>
+<string name="lucide_plug_2" translatable="false">Plug 2</string>
+<string name="lucide_plug_zap" translatable="false">Plug zap</string>
+<string name="lucide_plug" translatable="false">Plug</string>
+<string name="lucide_plus" translatable="false">Plus</string>
+<string name="lucide_pocket_knife" translatable="false">Pocket knife</string>
+<string name="lucide_podium" translatable="false">Podium</string>
+<string name="lucide_pointer_off" translatable="false">Pointer off</string>
+<string name="lucide_pointer" translatable="false">Pointer</string>
+<string name="lucide_popcorn" translatable="false">Popcorn</string>
+<string name="lucide_popsicle" translatable="false">Popsicle</string>
+<string name="lucide_pound_sterling" translatable="false">Pound sterling</string>
+<string name="lucide_power_off" translatable="false">Power off</string>
+<string name="lucide_power" translatable="false">Power</string>
+<string name="lucide_presentation" translatable="false">Presentation</string>
+<string name="lucide_printer_3d" translatable="false">Printer 3d</string>
+<string name="lucide_printer_check" translatable="false">Printer check</string>
+<string name="lucide_printer_x" translatable="false">Printer x</string>
+<string name="lucide_printer" translatable="false">Printer</string>
+<string name="lucide_projector" translatable="false">Projector</string>
+<string name="lucide_proportions" translatable="false">Proportions</string>
+<string name="lucide_puzzle" translatable="false">Puzzle</string>
+<string name="lucide_pyramid" translatable="false">Pyramid</string>
+<string name="lucide_qr_code" translatable="false">Qr code</string>
+<string name="lucide_quote" translatable="false">Quote</string>
+<string name="lucide_rabbit" translatable="false">Rabbit</string>
+<string name="lucide_radar" translatable="false">Radar</string>
+<string name="lucide_radiation" translatable="false">Radiation</string>
+<string name="lucide_radical" translatable="false">Radical</string>
+<string name="lucide_radio_off" translatable="false">Radio off</string>
+<string name="lucide_radio_receiver" translatable="false">Radio receiver</string>
+<string name="lucide_radio_tower" translatable="false">Radio tower</string>
+<string name="lucide_radio" translatable="false">Radio</string>
+<string name="lucide_radius" translatable="false">Radius</string>
+<string name="lucide_rainbow" translatable="false">Rainbow</string>
+<string name="lucide_rat" translatable="false">Rat</string>
+<string name="lucide_ratio" translatable="false">Ratio</string>
+<string name="lucide_receipt_cent" translatable="false">Receipt cent</string>
+<string name="lucide_receipt_euro" translatable="false">Receipt euro</string>
+<string name="lucide_receipt_indian_rupee" translatable="false">Receipt indian rupee</string>
+<string name="lucide_receipt_japanese_yen" translatable="false">Receipt japanese yen</string>
+<string name="lucide_receipt_pound_sterling" translatable="false">Receipt pound sterling</string>
+<string name="lucide_receipt_russian_ruble" translatable="false">Receipt russian ruble</string>
+<string name="lucide_receipt_swiss_franc" translatable="false">Receipt swiss franc</string>
+<string name="lucide_receipt_text" translatable="false">Receipt text</string>
+<string name="lucide_receipt_turkish_lira" translatable="false">Receipt turkish lira</string>
+<string name="lucide_receipt" translatable="false">Receipt</string>
+<string name="lucide_rectangle_circle" translatable="false">Rectangle circle</string>
+<string name="lucide_rectangle_ellipsis" translatable="false">Rectangle ellipsis</string>
+<string name="lucide_rectangle_goggles" translatable="false">Rectangle goggles</string>
+<string name="lucide_rectangle_horizontal" translatable="false">Rectangle horizontal</string>
+<string name="lucide_rectangle_vertical" translatable="false">Rectangle vertical</string>
+<string name="lucide_recycle" translatable="false">Recycle</string>
+<string name="lucide_redo_2" translatable="false">Redo 2</string>
+<string name="lucide_redo_dot" translatable="false">Redo dot</string>
+<string name="lucide_redo" translatable="false">Redo</string>
+<string name="lucide_refresh_ccw_dot" translatable="false">Refresh ccw dot</string>
+<string name="lucide_refresh_ccw" translatable="false">Refresh ccw</string>
+<string name="lucide_refresh_cw_off" translatable="false">Refresh cw off</string>
+<string name="lucide_refresh_cw" translatable="false">Refresh cw</string>
+<string name="lucide_refrigerator" translatable="false">Refrigerator</string>
+<string name="lucide_regex" translatable="false">Regex</string>
+<string name="lucide_remove_formatting" translatable="false">Remove formatting</string>
+<string name="lucide_repeat_1" translatable="false">Repeat 1</string>
+<string name="lucide_repeat_2" translatable="false">Repeat 2</string>
+<string name="lucide_repeat_off" translatable="false">Repeat off</string>
+<string name="lucide_repeat" translatable="false">Repeat</string>
+<string name="lucide_replace_all" translatable="false">Replace all</string>
+<string name="lucide_replace" translatable="false">Replace</string>
+<string name="lucide_reply_all" translatable="false">Reply all</string>
+<string name="lucide_reply" translatable="false">Reply</string>
+<string name="lucide_rewind" translatable="false">Rewind</string>
+<string name="lucide_ribbon" translatable="false">Ribbon</string>
+<string name="lucide_road" translatable="false">Road</string>
+<string name="lucide_robot_arm" translatable="false">Robot arm</string>
+<string name="lucide_robot_vacuum" translatable="false">Robot vacuum</string>
+<string name="lucide_rocket" translatable="false">Rocket</string>
+<string name="lucide_rocking_chair" translatable="false">Rocking chair</string>
+<string name="lucide_roller_coaster" translatable="false">Roller coaster</string>
+<string name="lucide_rose" translatable="false">Rose</string>
+<string name="lucide_rotate_3d" translatable="false">Rotate 3d</string>
+<string name="lucide_rotate_ccw_clock" translatable="false">Rotate ccw clock</string>
+<string name="lucide_rotate_ccw_key" translatable="false">Rotate ccw key</string>
+<string name="lucide_rotate_ccw_square" translatable="false">Rotate ccw square</string>
+<string name="lucide_rotate_ccw" translatable="false">Rotate ccw</string>
+<string name="lucide_rotate_cw_clock" translatable="false">Rotate cw clock</string>
+<string name="lucide_rotate_cw_fading_clock" translatable="false">Rotate cw fading clock</string>
+<string name="lucide_rotate_cw_square" translatable="false">Rotate cw square</string>
+<string name="lucide_rotate_cw" translatable="false">Rotate cw</string>
+<string name="lucide_route_off" translatable="false">Route off</string>
+<string name="lucide_route" translatable="false">Route</string>
+<string name="lucide_router" translatable="false">Router</string>
+<string name="lucide_rows_2" translatable="false">Rows 2</string>
+<string name="lucide_rows_3" translatable="false">Rows 3</string>
+<string name="lucide_rows_4" translatable="false">Rows 4</string>
+<string name="lucide_rss" translatable="false">Rss</string>
+<string name="lucide_rugby_ball" translatable="false">Rugby ball</string>
+<string name="lucide_ruler_dimension_line" translatable="false">Ruler dimension line</string>
+<string name="lucide_ruler" translatable="false">Ruler</string>
+<string name="lucide_russian_ruble" translatable="false">Russian ruble</string>
+<string name="lucide_sailboat" translatable="false">Sailboat</string>
+<string name="lucide_salad" translatable="false">Salad</string>
+<string name="lucide_sandwich" translatable="false">Sandwich</string>
+<string name="lucide_satellite_dish" translatable="false">Satellite dish</string>
+<string name="lucide_satellite" translatable="false">Satellite</string>
+<string name="lucide_saudi_riyal" translatable="false">Saudi riyal</string>
+<string name="lucide_save_all" translatable="false">Save all</string>
+<string name="lucide_save_check" translatable="false">Save check</string>
+<string name="lucide_save_off" translatable="false">Save off</string>
+<string name="lucide_save_pen" translatable="false">Save pen</string>
+<string name="lucide_save_plus" translatable="false">Save plus</string>
+<string name="lucide_save" translatable="false">Save</string>
+<string name="lucide_scale_3d" translatable="false">Scale 3d</string>
+<string name="lucide_scale" translatable="false">Scale</string>
+<string name="lucide_scaling" translatable="false">Scaling</string>
+<string name="lucide_scan_barcode" translatable="false">Scan barcode</string>
+<string name="lucide_scan_box" translatable="false">Scan box</string>
+<string name="lucide_scan_eye" translatable="false">Scan eye</string>
+<string name="lucide_scan_face" translatable="false">Scan face</string>
+<string name="lucide_scan_heart" translatable="false">Scan heart</string>
+<string name="lucide_scan_line" translatable="false">Scan line</string>
+<string name="lucide_scan_qr_code" translatable="false">Scan qr code</string>
+<string name="lucide_scan_search" translatable="false">Scan search</string>
+<string name="lucide_scan_square" translatable="false">Scan square</string>
+<string name="lucide_scan_text" translatable="false">Scan text</string>
+<string name="lucide_scan" translatable="false">Scan</string>
+<string name="lucide_school" translatable="false">School</string>
+<string name="lucide_scissors_line_dashed" translatable="false">Scissors line dashed</string>
+<string name="lucide_scissors" translatable="false">Scissors</string>
+<string name="lucide_scooter" translatable="false">Scooter</string>
+<string name="lucide_screen_share_off" translatable="false">Screen share off</string>
+<string name="lucide_screen_share" translatable="false">Screen share</string>
+<string name="lucide_scroll_text" translatable="false">Scroll text</string>
+<string name="lucide_scroll" translatable="false">Scroll</string>
+<string name="lucide_search_alert" translatable="false">Search alert</string>
+<string name="lucide_search_check" translatable="false">Search check</string>
+<string name="lucide_search_code" translatable="false">Search code</string>
+<string name="lucide_search_slash" translatable="false">Search slash</string>
+<string name="lucide_search_x" translatable="false">Search x</string>
+<string name="lucide_search" translatable="false">Search</string>
+<string name="lucide_section" translatable="false">Section</string>
+<string name="lucide_send_horizontal" translatable="false">Send horizontal</string>
+<string name="lucide_send_to_back" translatable="false">Send to back</string>
+<string name="lucide_send" translatable="false">Send</string>
+<string name="lucide_separator_horizontal" translatable="false">Separator horizontal</string>
+<string name="lucide_separator_vertical" translatable="false">Separator vertical</string>
+<string name="lucide_server_cog" translatable="false">Server cog</string>
+<string name="lucide_server_crash" translatable="false">Server crash</string>
+<string name="lucide_server_off" translatable="false">Server off</string>
+<string name="lucide_server_plus" translatable="false">Server plus</string>
+<string name="lucide_server" translatable="false">Server</string>
+<string name="lucide_settings_2" translatable="false">Settings 2</string>
+<string name="lucide_settings" translatable="false">Settings</string>
+<string name="lucide_shapes" translatable="false">Shapes</string>
+<string name="lucide_share_2" translatable="false">Share 2</string>
+<string name="lucide_share" translatable="false">Share</string>
+<string name="lucide_sheet" translatable="false">Sheet</string>
+<string name="lucide_shell" translatable="false">Shell</string>
+<string name="lucide_shelving_unit" translatable="false">Shelving unit</string>
+<string name="lucide_shield_alert" translatable="false">Shield alert</string>
+<string name="lucide_shield_ban" translatable="false">Shield ban</string>
+<string name="lucide_shield_check" translatable="false">Shield check</string>
+<string name="lucide_shield_cog_corner" translatable="false">Shield cog corner</string>
+<string name="lucide_shield_cog" translatable="false">Shield cog</string>
+<string name="lucide_shield_ellipsis" translatable="false">Shield ellipsis</string>
+<string name="lucide_shield_half" translatable="false">Shield half</string>
+<string name="lucide_shield_keyhole" translatable="false">Shield keyhole</string>
+<string name="lucide_shield_lock" translatable="false">Shield lock</string>
+<string name="lucide_shield_minus" translatable="false">Shield minus</string>
+<string name="lucide_shield_off" translatable="false">Shield off</string>
+<string name="lucide_shield_plus" translatable="false">Shield plus</string>
+<string name="lucide_shield_question_mark" translatable="false">Shield question mark</string>
+<string name="lucide_shield_user" translatable="false">Shield user</string>
+<string name="lucide_shield_x" translatable="false">Shield x</string>
+<string name="lucide_shield" translatable="false">Shield</string>
+<string name="lucide_ship_cargo" translatable="false">Ship cargo</string>
+<string name="lucide_ship_wheel" translatable="false">Ship wheel</string>
+<string name="lucide_ship" translatable="false">Ship</string>
+<string name="lucide_shirt" translatable="false">Shirt</string>
+<string name="lucide_shopping_bag" translatable="false">Shopping bag</string>
+<string name="lucide_shopping_basket" translatable="false">Shopping basket</string>
+<string name="lucide_shopping_cart_minus" translatable="false">Shopping cart minus</string>
+<string name="lucide_shopping_cart_plus" translatable="false">Shopping cart plus</string>
+<string name="lucide_shopping_cart" translatable="false">Shopping cart</string>
+<string name="lucide_shovel" translatable="false">Shovel</string>
+<string name="lucide_shower_head" translatable="false">Shower head</string>
+<string name="lucide_shredder" translatable="false">Shredder</string>
+<string name="lucide_shrimp_off" translatable="false">Shrimp off</string>
+<string name="lucide_shrimp" translatable="false">Shrimp</string>
+<string name="lucide_shrink" translatable="false">Shrink</string>
+<string name="lucide_shrub" translatable="false">Shrub</string>
+<string name="lucide_shuffle" translatable="false">Shuffle</string>
+<string name="lucide_sigma" translatable="false">Sigma</string>
+<string name="lucide_signal_high" translatable="false">Signal high</string>
+<string name="lucide_signal_low" translatable="false">Signal low</string>
+<string name="lucide_signal_medium" translatable="false">Signal medium</string>
+<string name="lucide_signal_zero" translatable="false">Signal zero</string>
+<string name="lucide_signal" translatable="false">Signal</string>
+<string name="lucide_signature" translatable="false">Signature</string>
+<string name="lucide_signpost_big" translatable="false">Signpost big</string>
+<string name="lucide_signpost" translatable="false">Signpost</string>
+<string name="lucide_siren" translatable="false">Siren</string>
+<string name="lucide_skip_back" translatable="false">Skip back</string>
+<string name="lucide_skip_forward" translatable="false">Skip forward</string>
+<string name="lucide_skull" translatable="false">Skull</string>
+<string name="lucide_slash" translatable="false">Slash</string>
+<string name="lucide_slice" translatable="false">Slice</string>
+<string name="lucide_sliders_horizontal" translatable="false">Sliders horizontal</string>
+<string name="lucide_sliders_vertical" translatable="false">Sliders vertical</string>
+<string name="lucide_smartphone_charging" translatable="false">Smartphone charging</string>
+<string name="lucide_smartphone_nfc" translatable="false">Smartphone nfc</string>
+<string name="lucide_smartphone" translatable="false">Smartphone</string>
+<string name="lucide_snail" translatable="false">Snail</string>
+<string name="lucide_snowflake" translatable="false">Snowflake</string>
+<string name="lucide_soap_dispenser_droplet" translatable="false">Soap dispenser droplet</string>
+<string name="lucide_sofa" translatable="false">Sofa</string>
+<string name="lucide_solar_panel" translatable="false">Solar panel</string>
+<string name="lucide_soup" translatable="false">Soup</string>
+<string name="lucide_space" translatable="false">Space</string>
+<string name="lucide_spade" translatable="false">Spade</string>
+<string name="lucide_sparkle" translatable="false">Sparkle</string>
+<string name="lucide_sparkles" translatable="false">Sparkles</string>
+<string name="lucide_speaker" translatable="false">Speaker</string>
+<string name="lucide_speech" translatable="false">Speech</string>
+<string name="lucide_spell_check_2" translatable="false">Spell check 2</string>
+<string name="lucide_spell_check" translatable="false">Spell check</string>
+<string name="lucide_spline_pointer" translatable="false">Spline pointer</string>
+<string name="lucide_spline" translatable="false">Spline</string>
+<string name="lucide_split" translatable="false">Split</string>
+<string name="lucide_spool" translatable="false">Spool</string>
+<string name="lucide_sport_shoe" translatable="false">Sport shoe</string>
+<string name="lucide_spotlight" translatable="false">Spotlight</string>
+<string name="lucide_spray_can" translatable="false">Spray can</string>
+<string name="lucide_sprout" translatable="false">Sprout</string>
+<string name="lucide_square_activity" translatable="false">Square activity</string>
+<string name="lucide_square_arrow_down_left" translatable="false">Square arrow down left</string>
+<string name="lucide_square_arrow_down_right" translatable="false">Square arrow down right</string>
+<string name="lucide_square_arrow_down" translatable="false">Square arrow down</string>
+<string name="lucide_square_arrow_left" translatable="false">Square arrow left</string>
+<string name="lucide_square_arrow_out_down_left" translatable="false">Square arrow out down left</string>
+<string name="lucide_square_arrow_out_down_right" translatable="false">Square arrow out down right</string>
+<string name="lucide_square_arrow_out_up_left" translatable="false">Square arrow out up left</string>
+<string name="lucide_square_arrow_out_up_right" translatable="false">Square arrow out up right</string>
+<string name="lucide_square_arrow_right_enter" translatable="false">Square arrow right enter</string>
+<string name="lucide_square_arrow_right_exit" translatable="false">Square arrow right exit</string>
+<string name="lucide_square_arrow_right" translatable="false">Square arrow right</string>
+<string name="lucide_square_arrow_up_left" translatable="false">Square arrow up left</string>
+<string name="lucide_square_arrow_up_right" translatable="false">Square arrow up right</string>
+<string name="lucide_square_arrow_up" translatable="false">Square arrow up</string>
+<string name="lucide_square_asterisk" translatable="false">Square asterisk</string>
+<string name="lucide_square_bookmark" translatable="false">Square bookmark</string>
+<string name="lucide_square_bottom_dashed_scissors" translatable="false">Square bottom dashed scissors</string>
+<string name="lucide_square_centerline_dashed_horizontal" translatable="false">Square centerline dashed horizontal</string>
+<string name="lucide_square_centerline_dashed_vertical" translatable="false">Square centerline dashed vertical</string>
+<string name="lucide_square_chart_gantt" translatable="false">Square chart gantt</string>
+<string name="lucide_square_check_big" translatable="false">Square check big</string>
+<string name="lucide_square_check" translatable="false">Square check</string>
+<string name="lucide_square_chevron_down" translatable="false">Square chevron down</string>
+<string name="lucide_square_chevron_left" translatable="false">Square chevron left</string>
+<string name="lucide_square_chevron_right" translatable="false">Square chevron right</string>
+<string name="lucide_square_chevron_up" translatable="false">Square chevron up</string>
+<string name="lucide_square_code" translatable="false">Square code</string>
+<string name="lucide_square_dashed_bottom_code" translatable="false">Square dashed bottom code</string>
+<string name="lucide_square_dashed_bottom" translatable="false">Square dashed bottom</string>
+<string name="lucide_square_dashed_kanban" translatable="false">Square dashed kanban</string>
+<string name="lucide_square_dashed_mouse_pointer" translatable="false">Square dashed mouse pointer</string>
+<string name="lucide_square_dashed_plus" translatable="false">Square dashed plus</string>
+<string name="lucide_square_dashed_text" translatable="false">Square dashed text</string>
+<string name="lucide_square_dashed_top_solid" translatable="false">Square dashed top solid</string>
+<string name="lucide_square_dashed_x_corner" translatable="false">Square dashed x corner</string>
+<string name="lucide_square_dashed_x" translatable="false">Square dashed x</string>
+<string name="lucide_square_dashed" translatable="false">Square dashed</string>
+<string name="lucide_square_dimensions" translatable="false">Square dimensions</string>
+<string name="lucide_square_divide" translatable="false">Square divide</string>
+<string name="lucide_square_dot" translatable="false">Square dot</string>
+<string name="lucide_square_equal" translatable="false">Square equal</string>
+<string name="lucide_square_exclamation_point" translatable="false">Square exclamation point</string>
+<string name="lucide_square_function" translatable="false">Square function</string>
+<string name="lucide_square_kanban" translatable="false">Square kanban</string>
+<string name="lucide_square_library" translatable="false">Square library</string>
+<string name="lucide_square_m" translatable="false">Square m</string>
+<string name="lucide_square_menu" translatable="false">Square menu</string>
+<string name="lucide_square_minus" translatable="false">Square minus</string>
+<string name="lucide_square_mouse_pointer" translatable="false">Square mouse pointer</string>
+<string name="lucide_square_off" translatable="false">Square off</string>
+<string name="lucide_square_parking_off" translatable="false">Square parking off</string>
+<string name="lucide_square_parking" translatable="false">Square parking</string>
+<string name="lucide_square_pause" translatable="false">Square pause</string>
+<string name="lucide_square_pen" translatable="false">Square pen</string>
+<string name="lucide_square_percent" translatable="false">Square percent</string>
+<string name="lucide_square_pi" translatable="false">Square pi</string>
+<string name="lucide_square_pilcrow" translatable="false">Square pilcrow</string>
+<string name="lucide_square_play" translatable="false">Square play</string>
+<string name="lucide_square_plus" translatable="false">Square plus</string>
+<string name="lucide_square_power" translatable="false">Square power</string>
+<string name="lucide_square_radical" translatable="false">Square radical</string>
+<string name="lucide_square_round_corner" translatable="false">Square round corner</string>
+<string name="lucide_square_scissors" translatable="false">Square scissors</string>
+<string name="lucide_square_sigma" translatable="false">Square sigma</string>
+<string name="lucide_square_slash" translatable="false">Square slash</string>
+<string name="lucide_square_sparkles" translatable="false">Square sparkles</string>
+<string name="lucide_square_split_horizontal" translatable="false">Square split horizontal</string>
+<string name="lucide_square_split_vertical" translatable="false">Square split vertical</string>
+<string name="lucide_square_square" translatable="false">Square square</string>
+<string name="lucide_square_stack" translatable="false">Square stack</string>
+<string name="lucide_square_star" translatable="false">Square star</string>
+<string name="lucide_square_stop" translatable="false">Square stop</string>
+<string name="lucide_square_terminal" translatable="false">Square terminal</string>
+<string name="lucide_square_text" translatable="false">Square text</string>
+<string name="lucide_square_user_round" translatable="false">Square user round</string>
+<string name="lucide_square_user" translatable="false">Square user</string>
+<string name="lucide_square_x" translatable="false">Square x</string>
+<string name="lucide_square" translatable="false">Square</string>
+<string name="lucide_squares_exclude" translatable="false">Squares exclude</string>
+<string name="lucide_squares_intersect" translatable="false">Squares intersect</string>
+<string name="lucide_squares_subtract" translatable="false">Squares subtract</string>
+<string name="lucide_squares_unite" translatable="false">Squares unite</string>
+<string name="lucide_squircle_dashed" translatable="false">Squircle dashed</string>
+<string name="lucide_squircle" translatable="false">Squircle</string>
+<string name="lucide_squirrel" translatable="false">Squirrel</string>
+<string name="lucide_stamp" translatable="false">Stamp</string>
+<string name="lucide_star_check" translatable="false">Star check</string>
+<string name="lucide_star_half" translatable="false">Star half</string>
+<string name="lucide_star_minus" translatable="false">Star minus</string>
+<string name="lucide_star_off" translatable="false">Star off</string>
+<string name="lucide_star_plus" translatable="false">Star plus</string>
+<string name="lucide_star_x" translatable="false">Star x</string>
+<string name="lucide_star" translatable="false">Star</string>
+<string name="lucide_step_back" translatable="false">Step back</string>
+<string name="lucide_step_forward" translatable="false">Step forward</string>
+<string name="lucide_stethoscope" translatable="false">Stethoscope</string>
+<string name="lucide_sticker" translatable="false">Sticker</string>
+<string name="lucide_sticky_note_check" translatable="false">Sticky note check</string>
+<string name="lucide_sticky_note_minus" translatable="false">Sticky note minus</string>
+<string name="lucide_sticky_note_off" translatable="false">Sticky note off</string>
+<string name="lucide_sticky_note_plus" translatable="false">Sticky note plus</string>
+<string name="lucide_sticky_note_x" translatable="false">Sticky note x</string>
+<string name="lucide_sticky_note" translatable="false">Sticky note</string>
+<string name="lucide_sticky_notes" translatable="false">Sticky notes</string>
+<string name="lucide_stone" translatable="false">Stone</string>
+<string name="lucide_store" translatable="false">Store</string>
+<string name="lucide_stretch_horizontal" translatable="false">Stretch horizontal</string>
+<string name="lucide_stretch_vertical" translatable="false">Stretch vertical</string>
+<string name="lucide_strikethrough" translatable="false">Strikethrough</string>
+<string name="lucide_subscript" translatable="false">Subscript</string>
+<string name="lucide_summary" translatable="false">Summary</string>
+<string name="lucide_sun_dim" translatable="false">Sun dim</string>
+<string name="lucide_sun_medium" translatable="false">Sun medium</string>
+<string name="lucide_sun_moon" translatable="false">Sun moon</string>
+<string name="lucide_sun_snow" translatable="false">Sun snow</string>
+<string name="lucide_sun" translatable="false">Sun</string>
+<string name="lucide_sunrise" translatable="false">Sunrise</string>
+<string name="lucide_sunset" translatable="false">Sunset</string>
+<string name="lucide_superscript" translatable="false">Superscript</string>
+<string name="lucide_swatch_book" translatable="false">Swatch book</string>
+<string name="lucide_swiss_franc" translatable="false">Swiss franc</string>
+<string name="lucide_switch_camera" translatable="false">Switch camera</string>
+<string name="lucide_sword" translatable="false">Sword</string>
+<string name="lucide_swords" translatable="false">Swords</string>
+<string name="lucide_syringe" translatable="false">Syringe</string>
+<string name="lucide_table_2" translatable="false">Table 2</string>
+<string name="lucide_table_cells_merge" translatable="false">Table cells merge</string>
+<string name="lucide_table_cells_split" translatable="false">Table cells split</string>
+<string name="lucide_table_columns_split" translatable="false">Table columns split</string>
+<string name="lucide_table_of_contents" translatable="false">Table of contents</string>
+<string name="lucide_table_properties" translatable="false">Table properties</string>
+<string name="lucide_table_rows_split" translatable="false">Table rows split</string>
+<string name="lucide_table" translatable="false">Table</string>
+<string name="lucide_tablet_smartphone" translatable="false">Tablet smartphone</string>
+<string name="lucide_tablet" translatable="false">Tablet</string>
+<string name="lucide_tablets" translatable="false">Tablets</string>
+<string name="lucide_tag_plus" translatable="false">Tag plus</string>
+<string name="lucide_tag_x" translatable="false">Tag x</string>
+<string name="lucide_tag" translatable="false">Tag</string>
+<string name="lucide_tags" translatable="false">Tags</string>
+<string name="lucide_tally_1" translatable="false">Tally 1</string>
+<string name="lucide_tally_2" translatable="false">Tally 2</string>
+<string name="lucide_tally_3" translatable="false">Tally 3</string>
+<string name="lucide_tally_4" translatable="false">Tally 4</string>
+<string name="lucide_tally_5" translatable="false">Tally 5</string>
+<string name="lucide_tangent" translatable="false">Tangent</string>
+<string name="lucide_target" translatable="false">Target</string>
+<string name="lucide_telescope" translatable="false">Telescope</string>
+<string name="lucide_tent_tree" translatable="false">Tent tree</string>
+<string name="lucide_tent" translatable="false">Tent</string>
+<string name="lucide_terminal" translatable="false">Terminal</string>
+<string name="lucide_test_tube_diagonal" translatable="false">Test tube diagonal</string>
+<string name="lucide_test_tube" translatable="false">Test tube</string>
+<string name="lucide_test_tubes" translatable="false">Test tubes</string>
+<string name="lucide_text_align_center" translatable="false">Text align center</string>
+<string name="lucide_text_align_end" translatable="false">Text align end</string>
+<string name="lucide_text_align_justify_center" translatable="false">Text align justify center</string>
+<string name="lucide_text_align_justify_end" translatable="false">Text align justify end</string>
+<string name="lucide_text_align_justify_start" translatable="false">Text align justify start</string>
+<string name="lucide_text_align_justify" translatable="false">Text align justify</string>
+<string name="lucide_text_align_start" translatable="false">Text align start</string>
+<string name="lucide_text_cursor_input" translatable="false">Text cursor input</string>
+<string name="lucide_text_cursor" translatable="false">Text cursor</string>
+<string name="lucide_text_initial" translatable="false">Text initial</string>
+<string name="lucide_text_quote" translatable="false">Text quote</string>
+<string name="lucide_text_search" translatable="false">Text search</string>
+<string name="lucide_text_wrap" translatable="false">Text wrap</string>
+<string name="lucide_theater" translatable="false">Theater</string>
+<string name="lucide_thermometer_snowflake" translatable="false">Thermometer snowflake</string>
+<string name="lucide_thermometer_sun" translatable="false">Thermometer sun</string>
+<string name="lucide_thermometer" translatable="false">Thermometer</string>
+<string name="lucide_thumbs_down" translatable="false">Thumbs down</string>
+<string name="lucide_thumbs_up" translatable="false">Thumbs up</string>
+<string name="lucide_tic_tac_toe" translatable="false">Tic tac toe</string>
+<string name="lucide_ticket_check" translatable="false">Ticket check</string>
+<string name="lucide_ticket_minus" translatable="false">Ticket minus</string>
+<string name="lucide_ticket_percent" translatable="false">Ticket percent</string>
+<string name="lucide_ticket_plus" translatable="false">Ticket plus</string>
+<string name="lucide_ticket_slash" translatable="false">Ticket slash</string>
+<string name="lucide_ticket_x" translatable="false">Ticket x</string>
+<string name="lucide_ticket" translatable="false">Ticket</string>
+<string name="lucide_tickets_plane" translatable="false">Tickets plane</string>
+<string name="lucide_tickets" translatable="false">Tickets</string>
+<string name="lucide_timeline" translatable="false">Timeline</string>
+<string name="lucide_timer_off" translatable="false">Timer off</string>
+<string name="lucide_timer_reset" translatable="false">Timer reset</string>
+<string name="lucide_timer" translatable="false">Timer</string>
+<string name="lucide_toggle_left" translatable="false">Toggle left</string>
+<string name="lucide_toggle_right" translatable="false">Toggle right</string>
+<string name="lucide_toilet" translatable="false">Toilet</string>
+<string name="lucide_tool_case" translatable="false">Tool case</string>
+<string name="lucide_toolbox" translatable="false">Toolbox</string>
+<string name="lucide_toothbrush_sparkles" translatable="false">Toothbrush sparkles</string>
+<string name="lucide_toothbrush" translatable="false">Toothbrush</string>
+<string name="lucide_tornado" translatable="false">Tornado</string>
+<string name="lucide_torus" translatable="false">Torus</string>
+<string name="lucide_touchpad_off" translatable="false">Touchpad off</string>
+<string name="lucide_touchpad" translatable="false">Touchpad</string>
+<string name="lucide_towel_rack" translatable="false">Towel rack</string>
+<string name="lucide_tower_control" translatable="false">Tower control</string>
+<string name="lucide_toy_brick" translatable="false">Toy brick</string>
+<string name="lucide_tractor" translatable="false">Tractor</string>
+<string name="lucide_traffic_cone" translatable="false">Traffic cone</string>
+<string name="lucide_trailer" translatable="false">Trailer</string>
+<string name="lucide_train_front_tunnel" translatable="false">Train front tunnel</string>
+<string name="lucide_train_front" translatable="false">Train front</string>
+<string name="lucide_train_track" translatable="false">Train track</string>
+<string name="lucide_tram_front" translatable="false">Tram front</string>
+<string name="lucide_transgender" translatable="false">Transgender</string>
+<string name="lucide_trash_off" translatable="false">Trash off</string>
+<string name="lucide_trash" translatable="false">Trash</string>
+<string name="lucide_tree_deciduous" translatable="false">Tree deciduous</string>
+<string name="lucide_tree_palm" translatable="false">Tree palm</string>
+<string name="lucide_tree_pine" translatable="false">Tree pine</string>
+<string name="lucide_trees" translatable="false">Trees</string>
+<string name="lucide_trending_down" translatable="false">Trending down</string>
+<string name="lucide_trending_up_down" translatable="false">Trending up down</string>
+<string name="lucide_trending_up" translatable="false">Trending up</string>
+<string name="lucide_triangle_alert" translatable="false">Triangle alert</string>
+<string name="lucide_triangle_dashed" translatable="false">Triangle dashed</string>
+<string name="lucide_triangle_right" translatable="false">Triangle right</string>
+<string name="lucide_triangle" translatable="false">Triangle</string>
+<string name="lucide_triangles_centerline_dashed_horizontal" translatable="false">Triangles centerline dashed horizontal</string>
+<string name="lucide_triangles_centerline_dashed_vertical" translatable="false">Triangles centerline dashed vertical</string>
+<string name="lucide_trophy" translatable="false">Trophy</string>
+<string name="lucide_truck_electric" translatable="false">Truck electric</string>
+<string name="lucide_truck" translatable="false">Truck</string>
+<string name="lucide_tube_lotion" translatable="false">Tube lotion</string>
+<string name="lucide_turkish_lira" translatable="false">Turkish lira</string>
+<string name="lucide_turntable" translatable="false">Turntable</string>
+<string name="lucide_turtle" translatable="false">Turtle</string>
+<string name="lucide_tv_minimal_play" translatable="false">Tv minimal play</string>
+<string name="lucide_tv_minimal" translatable="false">Tv minimal</string>
+<string name="lucide_tv" translatable="false">Tv</string>
+<string name="lucide_type_outline" translatable="false">Type outline</string>
+<string name="lucide_type" translatable="false">Type</string>
+<string name="lucide_umbrella_off" translatable="false">Umbrella off</string>
+<string name="lucide_umbrella" translatable="false">Umbrella</string>
+<string name="lucide_underline" translatable="false">Underline</string>
+<string name="lucide_undo_2" translatable="false">Undo 2</string>
+<string name="lucide_undo_dot" translatable="false">Undo dot</string>
+<string name="lucide_undo" translatable="false">Undo</string>
+<string name="lucide_unfold_horizontal" translatable="false">Unfold horizontal</string>
+<string name="lucide_unfold_vertical" translatable="false">Unfold vertical</string>
+<string name="lucide_ungroup" translatable="false">Ungroup</string>
+<string name="lucide_university" translatable="false">University</string>
+<string name="lucide_unlink_2" translatable="false">Unlink 2</string>
+<string name="lucide_unlink" translatable="false">Unlink</string>
+<string name="lucide_unplug" translatable="false">Unplug</string>
+<string name="lucide_upload" translatable="false">Upload</string>
+<string name="lucide_usb_c_port" translatable="false">Usb c port</string>
+<string name="lucide_usb" translatable="false">Usb</string>
+<string name="lucide_user_check" translatable="false">User check</string>
+<string name="lucide_user_cog" translatable="false">User cog</string>
+<string name="lucide_user_group" translatable="false">User group</string>
+<string name="lucide_user_key" translatable="false">User key</string>
+<string name="lucide_user_lock" translatable="false">User lock</string>
+<string name="lucide_user_minus" translatable="false">User minus</string>
+<string name="lucide_user_pen" translatable="false">User pen</string>
+<string name="lucide_user_plus" translatable="false">User plus</string>
+<string name="lucide_user_round_arrow_left" translatable="false">User round arrow left</string>
+<string name="lucide_user_round_check" translatable="false">User round check</string>
+<string name="lucide_user_round_cog" translatable="false">User round cog</string>
+<string name="lucide_user_round_group" translatable="false">User round group</string>
+<string name="lucide_user_round_key" translatable="false">User round key</string>
+<string name="lucide_user_round_minus" translatable="false">User round minus</string>
+<string name="lucide_user_round_pen" translatable="false">User round pen</string>
+<string name="lucide_user_round_plus" translatable="false">User round plus</string>
+<string name="lucide_user_round_search" translatable="false">User round search</string>
+<string name="lucide_user_round_x" translatable="false">User round x</string>
+<string name="lucide_user_round" translatable="false">User round</string>
+<string name="lucide_user_search" translatable="false">User search</string>
+<string name="lucide_user_shield" translatable="false">User shield</string>
+<string name="lucide_user_star" translatable="false">User star</string>
+<string name="lucide_user_x" translatable="false">User x</string>
+<string name="lucide_user" translatable="false">User</string>
+<string name="lucide_users_round" translatable="false">Users round</string>
+<string name="lucide_users" translatable="false">Users</string>
+<string name="lucide_utensils_crossed" translatable="false">Utensils crossed</string>
+<string name="lucide_utensils" translatable="false">Utensils</string>
+<string name="lucide_utility_pole" translatable="false">Utility pole</string>
+<string name="lucide_van" translatable="false">Van</string>
+<string name="lucide_variable" translatable="false">Variable</string>
+<string name="lucide_vault" translatable="false">Vault</string>
+<string name="lucide_vector_polygon" translatable="false">Vector polygon</string>
+<string name="lucide_vector_square" translatable="false">Vector square</string>
+<string name="lucide_vegan" translatable="false">Vegan</string>
+<string name="lucide_venetian_mask" translatable="false">Venetian mask</string>
+<string name="lucide_venus_and_mars" translatable="false">Venus and mars</string>
+<string name="lucide_venus" translatable="false">Venus</string>
+<string name="lucide_vibrate_off" translatable="false">Vibrate off</string>
+<string name="lucide_vibrate" translatable="false">Vibrate</string>
+<string name="lucide_video_off" translatable="false">Video off</string>
+<string name="lucide_video" translatable="false">Video</string>
+<string name="lucide_videotape" translatable="false">Videotape</string>
+<string name="lucide_view" translatable="false">View</string>
+<string name="lucide_virus_off" translatable="false">Virus off</string>
+<string name="lucide_virus" translatable="false">Virus</string>
+<string name="lucide_voicemail" translatable="false">Voicemail</string>
+<string name="lucide_volleyball" translatable="false">Volleyball</string>
+<string name="lucide_volume_1" translatable="false">Volume 1</string>
+<string name="lucide_volume_2" translatable="false">Volume 2</string>
+<string name="lucide_volume_off" translatable="false">Volume off</string>
+<string name="lucide_volume_x" translatable="false">Volume x</string>
+<string name="lucide_volume" translatable="false">Volume</string>
+<string name="lucide_vote" translatable="false">Vote</string>
+<string name="lucide_wallet_cards" translatable="false">Wallet cards</string>
+<string name="lucide_wallet_minimal" translatable="false">Wallet minimal</string>
+<string name="lucide_wallet" translatable="false">Wallet</string>
+<string name="lucide_wallpaper" translatable="false">Wallpaper</string>
+<string name="lucide_wand_sparkles" translatable="false">Wand sparkles</string>
+<string name="lucide_wand" translatable="false">Wand</string>
+<string name="lucide_warehouse" translatable="false">Warehouse</string>
+<string name="lucide_washing_machine" translatable="false">Washing machine</string>
+<string name="lucide_watch" translatable="false">Watch</string>
+<string name="lucide_waves_arrow_down" translatable="false">Waves arrow down</string>
+<string name="lucide_waves_arrow_up" translatable="false">Waves arrow up</string>
+<string name="lucide_waves_horizontal" translatable="false">Waves horizontal</string>
+<string name="lucide_waves_ladder" translatable="false">Waves ladder</string>
+<string name="lucide_waves_vertical" translatable="false">Waves vertical</string>
+<string name="lucide_waypoints" translatable="false">Waypoints</string>
+<string name="lucide_webcam_off" translatable="false">Webcam off</string>
+<string name="lucide_webcam" translatable="false">Webcam</string>
+<string name="lucide_webhook_off" translatable="false">Webhook off</string>
+<string name="lucide_webhook" translatable="false">Webhook</string>
+<string name="lucide_weight_tilde" translatable="false">Weight tilde</string>
+<string name="lucide_weight" translatable="false">Weight</string>
+<string name="lucide_wheat_off" translatable="false">Wheat off</string>
+<string name="lucide_wheat" translatable="false">Wheat</string>
+<string name="lucide_whistle" translatable="false">Whistle</string>
+<string name="lucide_whole_word" translatable="false">Whole word</string>
+<string name="lucide_wifi_cog" translatable="false">Wifi cog</string>
+<string name="lucide_wifi_high" translatable="false">Wifi high</string>
+<string name="lucide_wifi_low" translatable="false">Wifi low</string>
+<string name="lucide_wifi_off" translatable="false">Wifi off</string>
+<string name="lucide_wifi_pen" translatable="false">Wifi pen</string>
+<string name="lucide_wifi_sync" translatable="false">Wifi sync</string>
+<string name="lucide_wifi_zero" translatable="false">Wifi zero</string>
+<string name="lucide_wifi" translatable="false">Wifi</string>
+<string name="lucide_wind_arrow_down" translatable="false">Wind arrow down</string>
+<string name="lucide_wind_arrow_up" translatable="false">Wind arrow up</string>
+<string name="lucide_wind" translatable="false">Wind</string>
+<string name="lucide_wine_off" translatable="false">Wine off</string>
+<string name="lucide_wine" translatable="false">Wine</string>
+<string name="lucide_workflow" translatable="false">Workflow</string>
+<string name="lucide_worm" translatable="false">Worm</string>
+<string name="lucide_wrench_off" translatable="false">Wrench off</string>
+<string name="lucide_wrench" translatable="false">Wrench</string>
+<string name="lucide_x_line_top" translatable="false">X line top</string>
+<string name="lucide_x" translatable="false">X</string>
+<string name="lucide_zap_off" translatable="false">Zap off</string>
+<string name="lucide_zap" translatable="false">Zap</string>
+<string name="lucide_zodiac_aquarius" translatable="false">Zodiac aquarius</string>
+<string name="lucide_zodiac_aries" translatable="false">Zodiac aries</string>
+<string name="lucide_zodiac_cancer" translatable="false">Zodiac cancer</string>
+<string name="lucide_zodiac_capricorn" translatable="false">Zodiac capricorn</string>
+<string name="lucide_zodiac_gemini" translatable="false">Zodiac gemini</string>
+<string name="lucide_zodiac_leo" translatable="false">Zodiac leo</string>
+<string name="lucide_zodiac_libra" translatable="false">Zodiac libra</string>
+<string name="lucide_zodiac_ophiuchus" translatable="false">Zodiac ophiuchus</string>
+<string name="lucide_zodiac_pisces" translatable="false">Zodiac pisces</string>
+<string name="lucide_zodiac_sagittarius" translatable="false">Zodiac sagittarius</string>
+<string name="lucide_zodiac_scorpio" translatable="false">Zodiac scorpio</string>
+<string name="lucide_zodiac_taurus" translatable="false">Zodiac taurus</string>
+<string name="lucide_zodiac_virgo" translatable="false">Zodiac virgo</string>
+<string name="lucide_zoom_in" translatable="false">Zoom in</string>
+<string name="lucide_zoom_out" translatable="false">Zoom out</string>
+</resources>
