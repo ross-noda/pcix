@@ -1,3 +1,15 @@
+
+<div align="center">
+  <img
+    src="web/public/assets/brand_icon_dark.svg"
+    alt="P©ix Logo"
+    width="150"
+  />
+
+  <h1>P©ix</h1>
+  <p>A beautiful, offline-first productivity app for Android, Web and Desktop.</p>
+</div>
+
 <div align="center">
 
 # P©ix
