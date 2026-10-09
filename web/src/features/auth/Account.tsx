@@ -16,8 +16,9 @@ export function Account({
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [message, setMessage] = useState("");
-  const redirect =
-    import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin + "/";
+  const redirect = desktop
+    ? "com.example.pix://auth/callback"
+    : import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin + "/";
   const auth = async (mode: "login" | "signup" | "reset") => {
     if (!cloud) return;
     const result =
@@ -32,7 +33,12 @@ export function Account({
           : await cloud.auth.resetPasswordForEmail(email, {
               redirectTo: redirect,
             });
-    if (result.error) throw Error("error");
+    if (result.error)
+      throw Error(
+        result.error.code === "invalid_credentials"
+          ? "auth_invalid_credentials"
+          : "error",
+      );
     if (mode !== "login") setMessage(t("emailSent"));
   };
   return (
@@ -107,7 +113,7 @@ export function Account({
                 const { data, error } = await cloud!.auth.signInWithOAuth({
                   provider: "google",
                   options: {
-                    redirectTo: desktop ? "pcix://auth/callback" : redirect,
+                    redirectTo: redirect,
                     skipBrowserRedirect: desktop,
                   },
                 });

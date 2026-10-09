@@ -1,3 +1,4 @@
+import { Timeline } from "./Timeline";
 import { GoogleEvents } from "../integrations/GoogleEvents";
 import { useState } from "react";
 import { useApp, colors } from "../../app/context";
@@ -71,58 +72,7 @@ export function Calendar() {
         </div>
       </div>
       {week ? (
-        <div className="week-grid">
-          {Array.from({ length: 7 }, (_, i) => start + i).map((day) => (
-            <section className="week-column" key={day}>
-              <button
-                onClick={() => setSelected(day)}
-                className={day === selected ? "selected" : ""}
-              >
-                {format(day, { weekday: "short", day: "numeric" })}
-              </button>
-              <button
-                aria-label={t("add")}
-                onClick={() => quick({ due_day: day })}
-              >
-                <Icon name="plus" />
-              </button>
-              {tasks
-                .filter((x) => covers(x, day) && !x.is_completed)
-                .sort(
-                  (a, b) => (a.minute_of_day ?? -1) - (b.minute_of_day ?? -1),
-                )
-                .map((x) => (
-                  <button
-                    className="week-event"
-                    key={x.id}
-                    style={{
-                      borderColor:
-                        colors[
-                          (s.lists.find((l) => l.id === x.list_id)?.color ??
-                            0) % 12
-                        ],
-                      minHeight: Math.min(
-                        160,
-                        Math.max(40, (x.duration_minutes ?? 30) / 2),
-                      ),
-                    }}
-                    onClick={() => open(x.id)}
-                  >
-                    <small>
-                      {x.minute_of_day === null
-                        ? t("allDay")
-                        : `${String(Math.floor(x.minute_of_day / 60)).padStart(2, "0")}:${String(x.minute_of_day % 60).padStart(2, "0")}`}
-                    </small>
-                    <div>{x.title}</div>
-                    {x.duration_minutes && (
-                      <small>{x.duration_minutes} min</small>
-                    )}
-                  </button>
-                ))}
-              <GoogleEvents day={day} />
-            </section>
-          ))}
-        </div>
+        <Timeline start={start} select={setSelected} />
       ) : (
         <div className="calendar-layout">
           <section className="surface">

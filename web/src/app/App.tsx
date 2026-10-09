@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, lazy, Suspense, useDeferredValue } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { Session } from "@supabase/supabase-js";
 import { Context, usePreferences, translate, colors } from "./context";
@@ -10,13 +10,13 @@ import { emptySnapshot, INBOX, type Task } from "../types/model";
 import { filterTasks, type Mode } from "../domain/rules";
 import { Icon } from "../design-system/Icon";
 import { TaskList } from "../features/tasks/TaskRow";
-import { TaskEditor } from "../features/tasks/TaskEditor";
+const TaskEditor = lazy(() => import("../features/tasks/TaskEditor").then(m => ({default: m.TaskEditor})));
 import { QuickAdd } from "../features/tasks/QuickAdd";
-import { Calendar } from "../features/calendar/Calendar";
-import { Matrix } from "../features/matrix/Matrix";
-import { Organize } from "../features/organize/Organize";
-import { Habits } from "../features/habits/Habits";
-import { Settings } from "../features/settings/Settings";
+const Calendar = lazy(() => import("../features/calendar/Calendar").then(m => ({default: m.Calendar})));
+const Matrix = lazy(() => import("../features/matrix/Matrix").then(m => ({default: m.Matrix})));
+const Organize = lazy(() => import("../features/organize/Organize").then(m => ({default: m.Organize})));
+const Habits = lazy(() => import("../features/habits/Habits").then(m => ({default: m.Habits})));
+const Settings = lazy(() => import("../features/settings/Settings").then(m => ({default: m.Settings})));
 import { startReminders } from "../platform/reminders";
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -170,10 +170,12 @@ function Workspace({ session }: { session: Session | null }) {
   ];
   const closeQuick = useCallback(() => setQuick(null), []);
   const closeDetail = useCallback(() => setSelected(null), []);
+  const deferredQuery = useDeferredValue(query);
   const tasks = useMemo(
-    () => filterTasks(snapshot, { mode, list, tag, query, manual }),
-    [snapshot, mode, list, tag, query, manual],
+    () => route === "home" ? filterTasks(snapshot, { mode, list, tag, query: deferredQuery, manual }) : [],
+    [route, snapshot, mode, list, tag, deferredQuery, manual],
   );
+  const context = useMemo(() => ({...prefs, repo, snapshot, t, run, open: setSelected, quick}), [prefs.preferences, prefs.dark, repo, snapshot, t, run, quick]);
   const title =
     route === "home"
       ? list
@@ -185,7 +187,7 @@ function Workspace({ session }: { session: Session | null }) {
   if (!loaded) return <p>{t("loading")}</p>;
   return (
     <Context.Provider
-      value={{ ...prefs, repo, snapshot, t, run, open: setSelected, quick }}
+      value={context}
     >
       <div className="app">
         <aside className="sidebar">
@@ -284,6 +286,7 @@ function Workspace({ session }: { session: Session | null }) {
                 </button>
               </div>
             </header>
+            <Suspense fallback={<p role="status">{t("loading")}</p>}>
             <div className={"split " + (selected ? "has-detail" : "")}>
               <div>
                 {route === "home" && (
@@ -386,6 +389,7 @@ function Workspace({ session }: { session: Session | null }) {
                 <TaskEditor key={selected} id={selected} close={closeDetail} />
               )}
             </div>
+            </Suspense>
           </div>
         </main>
         <nav className="bottom-nav">

@@ -276,3 +276,9 @@ Aggiornamento formato 2×3: target 2 colonne × 3 righe, fallback e altezza mini
 - 34 test Web PASS; build TypeScript/Vite e `pnpm desktop:build --bundles deb` PASS su Ubuntu 26.04.1 amd64.
 - Pacchetto `p-ix` 0.1.0 installato; eseguibile `/usr/bin/pcix-desktop` e voce menu P©ix. Integrità dpkg, dipendenze dinamiche e desktop entry verificate. Processo avviato senza errori iniziali nei log e lasciato in esecuzione. Nessun collaudo automatico visivo della finestra nativa.
 - Superato il precedente blocco toolchain Linux. Windows, piena parità Android, collaudo funzionale nativo e cloud restano non verificati; nessuna configurazione o verifica cloud eseguita.
+
+## Abilitazione cloud desktop — 9 ottobre 2026
+
+- Aggiornamento Linux 0.1.1 installato e riavviato: URL e chiave anon pubblica dello stesso progetto Android incorporati nella build tramite `.env.local` ignorato da Git. Nessuna credenziale personale copiata.
+- Auth settings pubblico HTTP 200; provider email/password e Google abilitati. Redirect desktop allineato a quello Android (`com.example.pix://auth/callback`), registrato insieme allo schema precedente nel menu Linux. Messaggio credenziali errate localizzato.
+- 34 test PASS e build Web/DEB PASS; pacchetto installato verificato con dpkg. Login e sync disponibili dopo accesso dell’utente; flusso autenticato e trasferimento dati reale non ancora verificati. La precedente assenza di configurazione cloud locale è superata.

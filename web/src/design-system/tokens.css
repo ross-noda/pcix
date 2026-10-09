@@ -757,3 +757,18 @@ small,
 :root[data-theme="dark"] .matrix-card {
   background: #1e1e1e;
 }
+
+/* Window offscreen rows without removing keyboard/screen-reader access. */
+.task-row { content-visibility:auto; contain-intrinsic-size:auto 76px; }
+.timeline-scroll {overflow:auto;max-height:75vh;border-radius:22px;background:var(--pcix-surface)}
+.timeline-week {display:grid;grid-template-columns:52px repeat(7,minmax(130px,1fr));min-width:1000px}
+.timeline-labels {position:relative;color:var(--pcix-text-secondary);font-size:11px}
+.timeline-labels>span {position:absolute;right:6px}
+.timeline-heading {height:116px;overflow:auto;position:sticky;top:0;z-index:3;background:var(--pcix-surface);border-bottom:1px solid var(--pcix-outline)}
+.timeline-day {min-width:0;border-left:1px solid var(--pcix-outline)}
+.timeline-allday {max-height:68px;overflow:auto;font-size:11px}
+.timeline-allday>button {display:block;font-size:11px;padding:3px}
+.timeline-hours {position:relative;height:1440px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 59px,var(--pcix-outline) 59px,var(--pcix-outline) 60px)}
+.timeline-event {position:absolute;box-sizing:border-box;background:var(--pcix-surface-variant,var(--pcix-bg));border-left:3px solid;border-radius:5px;overflow:hidden;min-height:18px;z-index:1}
+.timeline-event>button:first-child {display:block;padding:2px 4px;font-size:11px;text-align:left;width:100%;height:100%;overflow:hidden;align-content:start}
+.timeline-event .resize-event {position:absolute;bottom:0;right:0;padding:0 3px;font-size:10px;min-height:12px;touch-action:none;cursor:ns-resize}

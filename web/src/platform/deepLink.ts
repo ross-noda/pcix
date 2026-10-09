@@ -8,7 +8,7 @@ export async function registerDeepLinks() {
     for (const raw of urls) {
       const url = new URL(raw);
       if (
-        url.protocol !== "pcix:" ||
+        !["pcix:", "com.example.pix:"].includes(url.protocol) ||
         url.hostname !== "auth" ||
         url.pathname !== "/callback"
       )

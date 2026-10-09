@@ -3,11 +3,6 @@ import type { Session } from "@supabase/supabase-js";
 import { useApp, Label } from "../../app/context";
 import { Account } from "../auth/Account";
 import { notificationPermission, download } from "../../platform/platform";
-import {
-  exportBackup,
-  readBackup,
-  restoreBackup,
-} from "../../data/repositories/backup";
 export function Settings({
   session,
   sync,
@@ -134,9 +129,10 @@ export function Settings({
           <h2>{t("backup")}</h2>
           <button
             onClick={() =>
-              void run(async () =>
-                download(await exportBackup(repo), "pcix-backup.zip"),
-              )
+              void run(async () => {
+                const {exportBackup} = await import("../../data/repositories/backup");
+                await download(await exportBackup(repo), "pcix-backup.zip");
+              })
             }
           >
             {t("exportBackup")}
@@ -151,6 +147,7 @@ export function Settings({
                 e.target.value = "";
                 if (file)
                   void run(async () => {
+                    const {readBackup, restoreBackup} = await import("../../data/repositories/backup");
                     const backup = await readBackup(file);
                     if (confirm(`${t("importConfirm")} (${backup.count})`))
                       await restoreBackup(repo, backup);

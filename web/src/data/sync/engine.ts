@@ -209,8 +209,10 @@ export class SyncEngine {
               deleted: c.operation === "DELETE",
             });
           }
-          const snapshot = await this.db.snapshot();
-          validateSnapshot(snapshot);
+          if (changes.length) {
+            const snapshot = await this.db.snapshot();
+            validateSnapshot(snapshot);
+          }
           await this.db.meta.bulkPut([
             { key: "checkpoint", value: through },
             { key: "lastSync", value: Date.now() },

@@ -1,9 +1,10 @@
+import { customMatrixMatch, matrixDates } from "../../domain/matrix";
 import { useState } from "react";
 import { useApp, Label } from "../../app/context";
 import { Icon } from "../../design-system/Icon";
 import { Modal } from "../../design-system/Modal";
 import { quadrant, dayOf, lastDay, parseDay } from "../../domain/rules";
-import { TaskList } from "../tasks/TaskRow";
+
 export function Matrix() {
   const {
     snapshot: s,
@@ -59,17 +60,7 @@ export function Matrix() {
                 !x.is_skipped &&
                 (!m.hideChildren || !x.parent_task_id) &&
                 (c.custom
-                  ? (!c.list || x.list_id === c.list) &&
-                    (!c.tag ||
-                      s.task_tags.some(
-                        (l) => l.task_id === x.id && l.tag_id === c.tag,
-                      )) &&
-                    (!c.priority || x.priority === +c.priority) &&
-                    (!c.from ||
-                      (lastDay(x) !== null &&
-                        lastDay(x)! >= parseDay(c.from)!)) &&
-                    (!c.to ||
-                      (x.due_day !== null && x.due_day <= parseDay(c.to)!))
+                  ? customMatrixMatch(x, c, new Set(s.task_tags.filter(l=>l.task_id===x.id).map(l=>l.tag_id)), dayOf())
                   : quadrant(x, dayOf(), m.urgentDays, m.importantPriority) ===
                     id),
             )
@@ -104,7 +95,7 @@ export function Matrix() {
                     quick({
                       matrix_urgent: id === 0 || id === 2,
                       matrix_important: id === 0 || id === 1,
-                      ...(c.list ? { list_id: c.list } : {}),
+                      ...((c.lists?.[0] || c.list) ? {list_id: c.lists?.[0] || c.list}: {}),
                     })
                   }
                 >
@@ -260,11 +251,12 @@ export function Matrix() {
                   {(["list", "tag", "priority"] as const).map((k) => (
                     <Label key={k} name={k}>
                       <select
-                        value={m.cards[id][k]}
+                        multiple
+                        value={m.cards[id][k === "list" ? "lists" : k === "tag" ? "tags" : "priorities"] ?? (m.cards[id][k] ? [m.cards[id][k]] : [])}
                         onChange={(e) =>
                           update({
                             cards: m.cards.map((c, i) =>
-                              i === id ? { ...c, [k]: e.target.value } : c,
+                              i === id ? { ...c, [k === "list" ? "lists" : k === "tag" ? "tags" : "priorities"]: Array.from(e.target.selectedOptions).map(o=>o.value).filter(Boolean) } : c,
                             ),
                           })
                         }
@@ -286,15 +278,17 @@ export function Matrix() {
                       </select>
                     </Label>
                   ))}
+                  <Label name="datePreset"><select value={m.cards[id].date ?? (m.cards[id].from || m.cards[id].to ? 'RANGE':'ALL')} onChange={e=>update({cards:m.cards.map((c,i)=>i===id?{...c,date:e.target.value as typeof c.date}:c)})}>{matrixDates.map(v=><option key={v} value={v}>{t('date_'+v)}</option>)}</select></Label>
                   {(["from", "to"] as const).map((k) => (
                     <Label key={k} name={k}>
                       <input
                         type="date"
-                        value={m.cards[id][k]}
+                        multiple
+                        value={m.cards[id][k === "list" ? "lists" : k === "tag" ? "tags" : "priorities"] ?? (m.cards[id][k] ? [m.cards[id][k]] : [])}
                         onChange={(e) =>
                           update({
                             cards: m.cards.map((c, i) =>
-                              i === id ? { ...c, [k]: e.target.value } : c,
+                              i === id ? { ...c, [k === "list" ? "lists" : k === "tag" ? "tags" : "priorities"]: Array.from(e.target.selectedOptions).map(o=>o.value).filter(Boolean) } : c,
                             ),
                           })
                         }

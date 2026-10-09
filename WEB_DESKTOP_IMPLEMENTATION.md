@@ -55,7 +55,7 @@ Copiare `.env.example` in `.env` e configurare soltanto valori pubblici:
 | `VITE_AUTH_REDIRECT_URL` | Origine Web effettiva autorizzata in Supabase Auth |
 | `VITE_GOOGLE_CALENDAR_CLIENT_ID` | Client OAuth Web Google, con origine autorizzata |
 
-Autorizzare anche `pcix://auth/callback` in Supabase per OAuth desktop. I valori Vite vengono incorporati nella build: cambiarli richiede ricompilazione. I token Google Calendar restano in memoria e richiedono riconnessione dopo riavvio/scadenza; sono separati dalla sessione Supabase. Senza configurazione cloud la modalità ospite rimane utilizzabile. Il login non carica automaticamente nel cloud i dati ospite.
+Il desktop usa `com.example.pix://auth/callback`, lo stesso redirect previsto da Android, da autorizzare in Supabase Auth. Il precedente schema `pcix` rimane registrato per compatibilità. I valori Vite vengono incorporati nella build: cambiarli richiede ricompilazione. I token Google Calendar restano in memoria e richiedono riconnessione dopo riavvio/scadenza; sono separati dalla sessione Supabase. Senza configurazione cloud la modalità ospite rimane utilizzabile. Il login non carica automaticamente nel cloud i dati ospite.
 
 ## Build Windows/Linux
 
@@ -89,6 +89,14 @@ Il binario Linux è compilato, installato e avviato. Restano aperti il collaudo 
 
 ## Installazione locale Linux del 9 ottobre
 
-Aprire **P©ix** dal menu applicazioni oppure eseguire `pcix-desktop`. Il pacchetto è in `web/src-tauri/target/release/bundle/deb/P©ix_0.1.0_amd64.deb`. L’app incorpora la Web e non richiede il server Vite. Usa una cache locale distinta da quella del browser. Nessuna configurazione cloud aggiunta.
+Aprire **P©ix** dal menu applicazioni oppure eseguire `pcix-desktop`. Il pacchetto è in `web/src-tauri/target/release/bundle/deb/P©ix_0.1.0_amd64.deb`. L’app incorpora la Web e non richiede il server Vite. Usa una cache locale distinta da quella del browser. Configurazione cloud aggiunta con l’aggiornamento 0.1.1 descritto sotto.
 
 Per disinstallare il programma: `sudo apt remove p-ix`. I dati personali della WebView non vengono cancellati da questo comando. I prerequisiti di compilazione installati rimangono nel sistema.
+
+## Cloud desktop 0.1.1 — 9 ottobre 2026
+
+Dopo la richiesta di rendere disponibile il proprio account, URL e chiave pubblica anon sono stati copiati dalla configurazione Android in `web/.env.local`, ignorato da Git e con permessi 0600. Verificato il ruolo pubblico della chiave prima dell’inclusione nella build. Nessuna password, sessione utente o chiave service-role utilizzata.
+
+Endpoint pubblico Auth settings raggiungibile (HTTP 200), provider email e Google abilitati. Redirect desktop allineato a `com.example.pix://auth/callback`; entrambi gli schemi sono registrati nel pacchetto. Errori di credenziali email/password localizzati. 34 test PASS, build Web e DEB 0.1.1 PASS, pacchetto aggiornato e processo riavviato.
+
+Aprire Impostazioni → Account e accedere con lo stesso account Android. La sincronizzazione parte dopo il login ed è ripetuta ogni 15 secondi; è disponibile anche Sincronizza ora. I dati ospite restano separati. La configurazione è presente, ma login utente, callback OAuth e trasferimento reale Android/cloud/desktop devono ancora essere confermati dopo l’accesso dell’utente: non dichiarati collaudati.

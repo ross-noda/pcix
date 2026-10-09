@@ -1,3 +1,4 @@
+import type { MatrixCard } from "../domain/matrix";
 import {
   createContext,
   useContext,
@@ -25,15 +26,7 @@ export interface Preferences {
     importantPriority: number;
     hideChildren: boolean;
     layout: number;
-    cards: {
-      title: string;
-      custom: boolean;
-      list: string;
-      tag: string;
-      priority: string;
-      from: string;
-      to: string;
-    }[];
+    cards: MatrixCard[];
   };
 }
 const defaults: Preferences = {
@@ -86,7 +79,10 @@ export function usePreferences() {
   }, []);
   const dark = p.theme === "dark" || (p.theme === "system" && system);
   useEffect(() => {
-    localStorage.setItem("pcix-preferences", JSON.stringify(p));
+    const persist = setTimeout(() => localStorage.setItem("pcix-preferences", JSON.stringify(p)), 150);
+    return () => clearTimeout(persist);
+  }, [p]);
+  useEffect(() => {
     const el = document.documentElement;
     el.dataset.theme = dark ? "dark" : "light";
     el.lang = p.language;
@@ -112,7 +108,7 @@ export function usePreferences() {
         ? "#000"
         : "#fff",
     );
-  }, [p, dark]);
+  }, [p.theme, p.language, p.accent, p.size, p.font, dark]);
   return { preferences: p, setPreferences: set, dark };
 }
 interface AppContext {
